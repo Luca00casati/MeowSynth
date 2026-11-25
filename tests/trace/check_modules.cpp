@@ -13,6 +13,7 @@
 #include "dsp/MidiToCv.h"
 #include "dsp/Oscillator.h"
 #include "dsp/Slider.h"
+#include "dsp/PeakFollower.h"
 #include "RenderScenario.h"
 #include <limits>
 #include <string>
@@ -278,6 +279,26 @@ static void checkDryWetSlider(const Trace& t) {
     }
 }
 
+// Peak Follower with static attack/decay (MeowSynth's sliders), times from the trace.
+static void checkPeakFollower(const Trace& t) {
+    for (auto* in : t.find("ug_peak_det")) {
+        auto x = t.samples(*in, 0), a = t.samples(*in, 1), d = t.samples(*in, 2), ref = t.samples(*in, 3);
+        PeakFollower pf;
+        std::vector<float> out(ref.size());
+        for (size_t b = 0; b * t.block < out.size(); b++) {
+            size_t s0 = b * t.block;
+            if (b == 0 || a[s0] != a[s0 - 1]) pf.setAttack(a[s0]);
+            if (b == 0 || d[s0] != d[s0 - 1]) pf.setDecay(d[s0]);
+            pf.process(&x[s0], &out[s0], t.block);
+        }
+        Result r;
+        for (size_t i = 0; i < out.size(); i++) compare(r, (long)i, out[i], ref[i]);
+        char name[64];
+        std::snprintf(name, sizeof(name), "peak follower #%d", in->n);
+        report(name, r);
+    }
+}
+
 int main(int argc, char** argv) {
     if (argc < 2) { std::fprintf(stderr, "usage: %s trace [scenario [bendRange]]\n", argv[0]); return 1; }
     Trace t;
@@ -288,6 +309,7 @@ int main(int argc, char** argv) {
     checkAdsr(t);
     checkOscillators(t);
     checkDryWetSlider(t);
+    checkPeakFollower(t);
     if (argc > 2) checkMidiToCv(t, argv[2], argc > 3 ? atoi(argv[3]) : 12);
     return 0;
 }
