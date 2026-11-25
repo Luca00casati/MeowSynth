@@ -17,7 +17,13 @@
 using namespace RenderScenario;
 typedef Plugin* (*PluginMain)(HostCallback);
 
+// Real Windows hosts (built with MSVC) run the x87 FPU at 53-bit precision (control word
+// 0x27f); MinGW's startup code switches to 64-bit. The original's arithmetic depends on it, so
+// match a real host before loading the plugin.
+static void useWindowsFpuDefaults() { unsigned short cw = 0x27f; __asm__ volatile("fldcw %0" : : "m"(cw)); }
+
 int main(int argc, char** argv) {
+    useWindowsFpuDefaults();
     if (argc < 3) {
         std::fprintf(stderr, "usage: %s <plugin.dll> <outdir> [scenario]\n", argv[0]);
         return 1;

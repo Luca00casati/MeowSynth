@@ -20,7 +20,13 @@ static const uint32_t kDoubles[] = { 0x1013e810, 0x1013e838, 0x101424f8, 0x10142
                                      0x10152a10, 0x10152a20, 0x10152a28, 0x10152a30, 0x10152a38, 0x10152a40 };
 static const uint32_t kFloats[] = { 0x10152a14, 0x10194720, 0x10157c38, 0x10157c40, 0x1013e7f4 };
 
+// Real Windows hosts (built with MSVC) run the x87 FPU at 53-bit precision (control word
+// 0x27f); MinGW's startup code switches to 64-bit. The original's arithmetic depends on it, so
+// match a real host before loading the plugin.
+static void useWindowsFpuDefaults() { unsigned short cw = 0x27f; __asm__ volatile("fldcw %0" : : "m"(cw)); }
+
 int main(int argc, char** argv) {
+    useWindowsFpuDefaults();
     if (argc < 3) { std::fprintf(stderr, "usage: %s <plugin.dll> <out.bin>\n", argv[0]); return 1; }
     HMODULE dll = LoadLibraryA(argv[1]);
     if (!dll) { std::fprintf(stderr, "cannot load\n"); return 1; }

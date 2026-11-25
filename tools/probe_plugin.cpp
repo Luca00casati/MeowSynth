@@ -14,7 +14,13 @@ static intptr_t disp(Plugin* p, int op, int idx = 0, intptr_t val = 0, void* ptr
     return p->dispatcher(p, op, idx, val, ptr, opt);
 }
 
+// Real Windows hosts (built with MSVC) run the x87 FPU at 53-bit precision (control word
+// 0x27f); MinGW's startup code switches to 64-bit. The original's arithmetic depends on it, so
+// match a real host before loading the plugin.
+static void useWindowsFpuDefaults() { unsigned short cw = 0x27f; __asm__ volatile("fldcw %0" : : "m"(cw)); }
+
 int main(int argc, char** argv) {
+    useWindowsFpuDefaults();
     if (argc < 2) { std::fprintf(stderr, "usage: %s <plugin.dll>\n", argv[0]); return 1; }
     HMODULE dll = LoadLibraryA(argv[1]);
     if (!dll) { std::fprintf(stderr, "cannot load %s (%lu)\n", argv[1], GetLastError()); return 1; }
