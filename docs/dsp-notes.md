@@ -169,6 +169,51 @@ records every plug buffer:
   - At the end: snap to the target and report the output static.
 - Portamento is event 12 (`FUN_100a1b60`): slope `(target - current)/(fs * pow(...time...))`.
 
+
+## Ported since (bit-exact against the traces)
+
+- **Midi to CV, mono mode** (`src/dsp/MidiToCv.*`):
+  - Note stack with Last / Low / High priority.
+  - The master glide position is advanced per process call.
+  - Portamento `T = 2^(((v*10 - 2)*12000*0.1 - 8000)/1200)` seconds.
+  - Pitch bend glides over `fs/60` samples, with a bend range of 11 in MeowSynth.
+  - The pitch output adds the *unrounded* port and bend sums.
+  - Note-off sets the pending gate level to 0 and reschedules the +3 gate callback.
+  - Velocity uses the cubic smoother.
+- **Oscillator** (`src/dsp/Oscillator.*`):
+  - The pitch→increment conversion keeps `10*v + 1572864` as a double (rounding it to float drifts
+    the phase).
+  - A static sync rising edge sets `phase = -pmOffset`. A streaming sync edge uses the sub-sample
+    fraction `cur/(cur - prev)` of an increment.
+  - Band cross-fade (`0x100acc80`): render the old band (`+0x110`) to scratch, restore the phase,
+    render the new band, then blend with `w = remaining*0.05 - k/21` (in a register). Any rest of the
+    block is rendered by the *base* function, which for streaming pitch re-picks the band from its
+    first sample. If that starts another fade, the original restores the pre-fade band as "old".
+  - White noise: every voice's noise oscillator draws 128 values per block from one shared LCG
+    (seed starts at 0), in a fixed voice order.
+- **Slider** (`src/dsp/Slider.*`): target `((max - min)*p + min)*0.1`, reached with a linear glide
+  over `trunc(fs)/32` samples (4 samples for slider types 4-6 and 8).
+- **Peak Follower** (`src/dsp/PeakFollower.*`): `coef = exp(-100/(max(t, 0.001)*fs))`, then
+  `env = (env - |x|)*coef + |x|`, with the `+1e-18f - 1e-18f` flush.
+- **Delay2** (`src/dsp/Delay.*`): `trunc(fs*time)` buffer. The read offset is
+  `(1.0 - mod)*size`, computed in chop mode; the output is interpolated, then flushed.
+- **Adder** (implicit, a float sum) and **Level Adj** (`ug_multiplier`, a float product): exact.
+
+Still unexplained: idle voices' oscillators and filters change abruptly long after release (voice
+suspension or reset). This does not affect the output, because those voices are silent.
+
+## DH_MultiFilter2 (SEM, in progress)
+
+- SDK 2 module: `makeModule` (RVA 0x2d30) builds a 0x1e0-byte object, with the C++ vtable at
+  `0x1000f148`. Pins (`0x10002b40`): 0 Input, 1 Freq(Hz)|Pitch(v), 2 Q|Res(v), 3 Filter Type
+  (LP,HP,BP1,BP2,Notch), 4 Gain Compensation, 5 Filter Stages (1-8), 6 Output, 7 Input Mode
+  (Hz/Q, Pitch/Res, Hz/Res, Pitch/Q). MeowSynth uses Input Mode 1 (Pitch/Res), Gain Comp on,
+  1 stage, and type LP unless the Filter Type control changes it.
+- Setup (`0x100011a0`): builds a 7001-entry frequency table (`0x1001e7b8`), a 4714-entry sine table,
+  and constant tables, and saves its own chop-mode control word (`| 0xc3f`). The big methods are
+  `0x100011a0` and `0x10002640`. Decompiled code is in `~/tools/ghidra-projects/decomp_dh`
+  (Ghidra project `DHFilter`).
+
 ## Still to do (oscillator)
 - Sync wrapper `FUN_100ae720` (the voice oscillator's Sync input is the MIDI gate), the band
   cross-fade `0x100acc80`, and the pulse/PW variants (not used by MeowSynth).
