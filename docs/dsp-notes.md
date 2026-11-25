@@ -213,6 +213,33 @@ suspension or reset). This does not affect the output, because those voices are 
   and constant tables, and saves its own chop-mode control word (`| 0xc3f`). The big methods are
   `0x100011a0` and `0x10002640`. Decompiled code is in `~/tools/ghidra-projects/decomp_dh`
   (Ghidra project `DHFilter`).
+- Process (`0x100020d0` → `0x10001c10`):
+  - While the input is exactly 0, write 0 (and reset the stage states once it becomes non-zero).
+  - Otherwise run a cascade of `Filter Stages` Direct Form I biquads with double state per stage:
+    `x1 +0x70+8s`, `x2 +0x90+8s`, `y1 +0xb0+8s`, `y2 +0xd0+8s`. Coefficients: b0 `+0x170`,
+    b1 `+0x178`, b2 `+0x180`, a1 `+0x188`, a2 `+0x190`.
+  - The output is scaled by gain `+0x1b0`; a result with a zero exponent is flushed to 0.
+  - The main loop is unrolled by 4. Only the first sample of each group of 4 adds the `1e-150`
+    anti-denormal constant (the remainder loop adds it to every sample), and the sum order differs
+    per position: take it from the assembly.
+  - Coefficients are re-checked once every 4 samples, at a global phase `+0x1c0`
+    (`(phase + n) & 3`, offsets {0,3,2,1}): when Freq or Q differs from the cached
+    `+0x1c8`/`+0x1cc`, `FUN_10002210` runs.
+- `FUN_10002210(freq, q)`:
+  - Pitch input modes (1, 3): Hz = interpolation in the 7001-entry table `0x1001e7b8` at
+    `freq * C1 + C2`.
+  - Res modes (1, 2): Q comes from the 513-entry table `0x10034308` at `q * C3`.
+  - Gain compensation (when on and type < 3): gain from table `0x1002c288 + (stages-1)*0x202`,
+    indexed by `Q * k`.
+- `FUN_100023e0(hz, Q)` is the RBJ cookbook:
+  - Clamp Hz to [1, `+0x1a8`] and Q ≥ 0.001.
+  - `sin w` and `cos w` come from a sine table (`0x10015458`, 4714 entries, `sin(i * C)`), the
+    cosine via a π/2 offset (`0x10014928`); `alpha = sin/(2Q)`, `a0inv = 1/(1 + alpha) + 1e-150`.
+  - LP: `b1 = 1 - cos`, `b0 = b2 = b1 * 0.5`, `a1 = -2 cos` (× the constant at `0x1000f398`),
+    `a2 = 1 - alpha`; everything is then multiplied by `a0inv`. HP/BP1/BP2/Notch are analogous.
+- Plan: dump the setup tables from the running original (the SEM is loaded as `dh_multifilter2.sem`
+  at a relocated base; find it with `GetModuleHandle`), rebuild them, then port the loop from the
+  assembly and check it against the `ug_plugin2` instances in the traces.
 
 ## Still to do (oscillator)
 - Sync wrapper `FUN_100ae720` (the voice oscillator's Sync input is the MIDI gate), the band
