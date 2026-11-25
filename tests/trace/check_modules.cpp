@@ -10,6 +10,8 @@
 #include "dsp/Vca.h"
 #include "dsp/CrossFade.h"
 #include "dsp/Adsr.h"
+#include "dsp/MidiToCv.h"
+#include "RenderScenario.h"
 #include <limits>
 #include <cmath>
 #include <cstdlib>
@@ -141,13 +143,60 @@ static void checkAdsr(const Trace& t) {
     }
 }
 
+// Midi to CV: replays the scenario's MIDI and compares Gate, Pitch and Velocity with the voice
+// that plays (mono mode).
+static void checkMidiToCv(const Trace& t, const char* scenario, int bendRange) {
+    const RenderScenario::Scenario* sc = nullptr;
+    for (int s = 0; s < RenderScenario::kNumScenarios; s++)
+        if (!std::strcmp(RenderScenario::kScenarios[s].name, scenario)) sc = &RenderScenario::kScenarios[s];
+    if (!sc) return;
+    const TraceInstance* active = nullptr;
+    for (auto* in : t.find("ug_midi_to_cv")) {
+        auto g = t.samples(*in, 3);
+        for (float v : g) if (v != 0.0f) { active = in; break; }
+        if (active) break;
+    }
+    if (!active) return;
+    auto port = t.samples(*active, 9);
+    const char* names[3] = { "gate", "pitch", "velocity" };
+    std::vector<float> ref[3] = { t.samples(*active, 3), t.samples(*active, 4), t.samples(*active, 5) };
+    const size_t n = ref[0].size();
+    std::vector<float> mine[4];
+    for (auto& m : mine) m.assign(n, 0.0f);
+    float* outs[4] = { mine[0].data(), mine[1].data(), mine[2].data(), mine[3].data() };
+
+    MidiToCv cv;
+    cv.setBendRange(bendRange);
+    for (size_t b = 0; b * t.block < n; b++) {
+        size_t s0 = b * t.block;
+        cv.setPortamentoTime(port[s0]);
+        for (int m = 0; m < sc->numMidi; m++) {
+            long at = (long)sc->midi[m].block * RenderScenario::kBlockSize + sc->midi[m].offset;
+            if (at >= (long)s0 && at < (long)(s0 + t.block))
+                cv.midi((int)(at - s0), sc->midi[m].status, sc->midi[m].data1, sc->midi[m].data2);
+        }
+        cv.process(outs, (int)s0, t.block);
+    }
+    for (int k = 0; k < 3; k++) {
+        Result r;
+        for (size_t i = 0; i < n; i++) compare(r, (long)i, mine[k][i], ref[k][i]);
+        char name[64];
+        std::snprintf(name, sizeof(name), "midi_to_cv #%d %s", active->n, names[k]);
+        report(name, r);
+        if (getenv("DEBUG_CV") && r.first >= 0 && atoi(getenv("DEBUG_CV")) == k)
+            for (long i = r.first - 2; i < r.first + 5; i++)
+                std::printf("  %ld mine %.9g ref %.9g\n", i, mine[k][i], ref[k][i]);
+    }
+}
+
 int main(int argc, char** argv) {
-    if (argc < 2) { std::fprintf(stderr, "usage: %s trace\n", argv[0]); return 1; }
+    if (argc < 2) { std::fprintf(stderr, "usage: %s trace [scenario [bendRange]]\n", argv[0]); return 1; }
     Trace t;
     if (!t.load(argv[1])) { std::fprintf(stderr, "cannot read %s\n", argv[1]); return 1; }
     std::printf("%zu instances, %d blocks of %d\n", t.inst.size(), t.blocks, t.block);
     checkVca(t);
     checkCrossFade(t);
     checkAdsr(t);
+    if (argc > 2) checkMidiToCv(t, argv[2], argc > 3 ? atoi(argv[3]) : 12);
     return 0;
 }
