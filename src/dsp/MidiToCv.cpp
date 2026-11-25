@@ -147,7 +147,11 @@ namespace meow {
             }
         }
         (void)channel;
-        gate.set(0.0f, gate.defaultLength);  // note off to the voice: gate low
+        // Note off to the voice (0x100a20f0): gate low now, and the pending gate level becomes 0;
+        // a gate-on scheduled by an earlier note-on will therefore fire with level 0.
+        gateLevel = 0.0f;
+        gate.set(0.0f, gate.defaultLength);
+        events.push_back(Event{ clock + 3, kEvGateOn, 0, 0 });
     }
 
     void MidiToCv::voiceNoteOn(int channel, int note, int vel) {  // 0x100a1fd0

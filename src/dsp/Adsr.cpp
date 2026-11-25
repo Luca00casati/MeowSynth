@@ -15,10 +15,10 @@ namespace meow {
 
     Adsr::Adsr() : segment(2) {}
 
-    float Adsr::rateFor(float v) const {
+    double Adsr::rateFor(float v) const {
         // 1 / (2^((v * 10 * 12000 * 0.1 - 8000) / 1200) * fs), evaluated like the x87 code.
         double x = ((double)v * 10.0f * 12000.0f * 0.1f - 8000.0f) * 0.0008333333333333334;
-        return (float)(1.0 / (std::pow(2.0, x) * sampleRate));
+        return 1.0 / (std::pow(2.0, x) * sampleRate);
     }
 
     float Adsr::inputValue(int pin, const float* const* buffers, int offset) const {
@@ -53,14 +53,14 @@ namespace meow {
         if (streaming[kOverallLevel] || streaming[timePin]) {
             if (!streaming[timePin]) {
                 mode = kRampLevelStream;
-                rate = rateFor(staticValue[timePin]);
+                rate = (float)rateFor(staticValue[timePin]);
             } else {
                 mode = kRampTimeStream;
                 computeLength = false;
             }
         } else {
             mode = kRampStatic;
-            rate = rateFor(staticValue[timePin]);
+            rate = (float)rateFor(staticValue[timePin]);
         }
         if (quickRelease) {
             rate = current * 0.06666667f;
@@ -199,12 +199,12 @@ namespace meow {
                 const float* timeIn = buffers[kTimePin[segment < kSegmentCount ? segment : kSegmentCount]];
                 bool down = (double)target - current <= 0.0;
                 for (int i = 0; i < count; i++) {
-                    float r = quickRelease ? -rate : rateFor(timeIn[offset + i]);  // TODO quick release
+                    double r = quickRelease ? (double)rate : rateFor(timeIn[offset + i]);  // TODO quick release
                     if (down) {
-                        current = (float)((double)current - (quickRelease ? -r : r));
+                        current = (float)((double)current - r);
                         if (current < target) goto crossed;
                     } else {
-                        current = (float)((double)r + current);
+                        current = (float)(r + current);
                         if (target <= current) goto crossed;
                     }
                     out[offset + i] = levelIn[offset + i] * current;

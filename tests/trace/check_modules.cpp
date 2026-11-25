@@ -11,8 +11,10 @@
 #include "dsp/CrossFade.h"
 #include "dsp/Adsr.h"
 #include "dsp/MidiToCv.h"
+#include "dsp/Oscillator.h"
 #include "RenderScenario.h"
 #include <limits>
+#include <string>
 #include <cmath>
 #include <cstdlib>
 #include <cstdio>
@@ -189,6 +191,73 @@ static void checkMidiToCv(const Trace& t, const char* scenario, int bendRange) {
     }
 }
 
+// Oscillators: waveform / scale / smoothing from the patch (passed per instance by checking
+// which configuration reproduces the first block), inputs replayed like the ADSR's.
+static void checkOscillators(const Trace& t) {
+    struct Config { Oscillator::Waveform wf; bool khz, smooth; const char* name; };
+    const Config configs[] = {
+        { Oscillator::kRamp, false, false, "ramp" }, { Oscillator::kWhiteNoise, false, false, "noise" },
+        { Oscillator::kSine, true, true, "sine kHz" }, { Oscillator::kSine, false, true, "sine" },
+    };
+    // trace plug -> Oscillator input
+    const int plugOf[Oscillator::kNumInputs] = { 0, 1, 4, 5, 7 };
+    for (auto* in : t.find("ug_oscillator2")) {
+        std::vector<float> pins[Oscillator::kNumInputs];
+        for (int k = 0; k < Oscillator::kNumInputs; k++) pins[k] = t.samples(*in, plugOf[k]);
+        auto ref = t.samples(*in, 3);
+        const size_t n = ref.size();
+        const float* buf[Oscillator::kNumInputs];
+        for (int k = 0; k < Oscillator::kNumInputs; k++) buf[k] = pins[k].data();
+        Result best; const char* bestName = "?";
+        for (auto& cfg : configs) {
+            if (cfg.wf == Oscillator::kWhiteNoise) continue;  // shared generator, checked separately
+            Oscillator osc(cfg.wf, cfg.khz, cfg.smooth);
+            std::vector<float> out(n, 0.0f);
+            bool streaming[Oscillator::kNumInputs] = {};
+            for (int k = 0; k < Oscillator::kNumInputs; k++) osc.setInput(k, pins[k][0], false, buf, 0);
+            size_t runStart = 0;
+            for (size_t i = 1; i <= n; i++) {
+                bool event = i == n || i % t.block == 0;
+                bool fire[Oscillator::kNumInputs] = {}, ns[Oscillator::kNumInputs] = {};
+                if (i < n)
+                    for (int k = 0; k < Oscillator::kNumInputs; k++) {
+                        bool changed = pins[k][i] != pins[k][i - 1];
+                        bool next = i + 1 < n && pins[k][i + 1] != pins[k][i];
+                        bool s2 = k == Oscillator::kSync ? false : (changed && next);
+                        if (s2 != streaming[k] || (!s2 && changed)) { fire[k] = true; ns[k] = s2; event = true; }
+                    }
+                if (event) {
+                    if (i > runStart) osc.process(buf, out.data(), (int)runStart, (int)(i - runStart));
+                    runStart = i;
+                    for (int k = 0; k < Oscillator::kNumInputs; k++)
+                        if (fire[k]) { streaming[k] = ns[k]; osc.setInput(k, pins[k][i], ns[k], buf, (int)i); }
+                }
+            }
+            Result r;
+            size_t from = getenv("OSC_FROM") ? (size_t)atol(getenv("OSC_FROM")) : t.block * 2;
+            for (size_t i = from; i < n; i++) compare(r, (long)i, out[i], ref[i]);
+            if (best.checked == 0 || r.mismatches < best.mismatches) { best = r; bestName = cfg.name; }
+            if (getenv("OSC_BLOCKS") && atoi(getenv("OSC_BLOCKS")) == in->n) {
+                std::string line;
+                for (size_t b = 0; b * t.block < n; b++) {
+                    int bad = 0;
+                    for (int k = 0; k < t.block; k++) bad += out[b * t.block + k] != ref[b * t.block + k];
+                    line += bad == 0 ? '.' : (bad < 20 ? 'x' : 'X');
+                }
+                std::printf("  [%s] %s\n", cfg.name, line.c_str());
+            }
+            if (getenv("DEBUG_OSC") && atoi(getenv("DEBUG_OSC")) == in->n && r.first >= 0) {
+                std::printf("  [%s]\n", cfg.name);
+                for (long i = r.first - 2; i < r.first + 4; i++)
+                    std::printf("  %ld mine %.9g ref %.9g pitch %.9g sync %g\n", i, out[i], ref[i], pins[0][i], pins[2][i]);
+            }
+        }
+        char name[64];
+        std::snprintf(name, sizeof(name), "osc #%d (%s)", in->n, bestName);
+        report(name, best);
+    }
+}
+
 int main(int argc, char** argv) {
     if (argc < 2) { std::fprintf(stderr, "usage: %s trace [scenario [bendRange]]\n", argv[0]); return 1; }
     Trace t;
@@ -197,6 +266,7 @@ int main(int argc, char** argv) {
     checkVca(t);
     checkCrossFade(t);
     checkAdsr(t);
+    checkOscillators(t);
     if (argc > 2) checkMidiToCv(t, argv[2], argc > 3 ? atoi(argv[3]) : 12);
     return 0;
 }

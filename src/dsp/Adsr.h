@@ -40,7 +40,7 @@ namespace meow {
         void gateChanged(float gate, const float* const* buffers, int offset);  // 0x100816d0
         int runSegment(const float* const* buffers, float* out, int offset, int count);
         float inputValue(int pin, const float* const* buffers, int offset) const;
-        float rateFor(float timeVolts) const;  // 0x10081330
+        double rateFor(float timeVolts) const;  // 0x10081330 (result left in the FPU)
 
         enum Mode {
             kIdle,            // 0x10081620: nothing to do
