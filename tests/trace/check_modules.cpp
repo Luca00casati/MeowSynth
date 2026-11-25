@@ -8,7 +8,11 @@
 //   ./check_modules voice128.trace
 #include "Trace.h"
 #include "dsp/Vca.h"
+#include "dsp/CrossFade.h"
+#include "dsp/Adsr.h"
+#include <limits>
 #include <cmath>
+#include <cstdlib>
 #include <cstdio>
 
 using namespace meow;
@@ -63,11 +67,87 @@ static void checkVca(const Trace& t) {
     }
 }
 
+// X-Mix: Mix is static while it equals the previous sample (as for the VCA's Volume).
+static void checkCrossFade(const Trace& t) {
+    CrossFade xf(CrossFade::kEqualPowerSin);
+    for (auto* in : t.find("ug_cross_fade")) {
+        auto a = t.samples(*in, 0), b = t.samples(*in, 1), mix = t.samples(*in, 2), out = t.samples(*in, 3);
+        Result r;
+        for (size_t i = 1; i < out.size(); i++) {
+            float o;
+            if (mix[i] == mix[i - 1]) {
+                float gA, gB;
+                xf.staticGains(mix[i], gA, gB);
+                xf.processStatic(&a[i], &b[i], gA, gB, &o, 1);
+            } else {
+                xf.processStreaming(&a[i], &b[i], &mix[i], &o, 1);
+            }
+            compare(r, (long)i, o, out[i]);
+        }
+        char name[64];
+        std::snprintf(name, sizeof(name), "ug_cross_fade #%d", in->n);
+        report(name, r);
+    }
+}
+
+// ADSR: input state changes are derived from the samples (streaming while the value changes,
+// static from the first repeated value) and delivered as events at that sample.
+static void checkAdsr(const Trace& t) {
+    for (auto* in : t.find("ug_adsr")) {
+        std::vector<float> pins[Adsr::kNumInputs];
+        for (int p = 0; p < Adsr::kNumInputs; p++) pins[p] = t.samples(*in, p);
+        auto ref = t.samples(*in, 6);
+        const size_t n = ref.size();
+        std::vector<float> out(n, std::numeric_limits<float>::quiet_NaN());
+        const float* buf[Adsr::kNumInputs];
+        for (int p = 0; p < Adsr::kNumInputs; p++) buf[p] = pins[p].data();
+
+        Adsr env;
+        bool streaming[Adsr::kNumInputs] = {};
+        for (int p = 0; p < Adsr::kNumInputs; p++) env.setInput(p, pins[p][0], false, buf, 0);
+        // Process in runs between events, never across a 128-sample block boundary (the
+        // original's process calls are split exactly like that, and its accumulators are
+        // rounded to float between calls).
+        size_t runStart = 1;
+        for (size_t i = 1; i <= n; i++) {
+            bool event = i == n || i % t.block == 0;
+            bool fire[Adsr::kNumInputs] = {};
+            bool newStream[Adsr::kNumInputs] = {};
+            if (i < n) {
+                for (int p = 0; p < Adsr::kNumInputs; p++) {
+                    bool changed = pins[p][i] != pins[p][i - 1];
+                    bool next = i + 1 < n && pins[p][i + 1] != pins[p][i];
+                    bool s2 = p == Adsr::kGate ? false : (changed && next);
+                    if (s2 != streaming[p] || (!s2 && changed)) { fire[p] = true; newStream[p] = s2; event = true; }
+                }
+            }
+            if (event) {
+                if (i > runStart) env.process(buf, out.data(), (int)runStart, (int)(i - runStart));
+                runStart = i;
+                for (int p = 0; p < Adsr::kNumInputs; p++)
+                    if (fire[p]) { streaming[p] = newStream[p]; env.setInput(p, pins[p][i], newStream[p], buf, (int)i); }
+            }
+        }
+        Result r;
+        for (size_t i = 1; i < n; i++)
+            if (!std::isnan(out[i])) compare(r, (long)i, out[i], ref[i]);
+        if (getenv("DEBUG_ADSR") && r.first >= 0 && atoi(getenv("DEBUG_ADSR")) == in->n)
+            for (long i = r.first - 3; i < r.first + 6; i++)
+                std::printf("  %ld mine %.9g ref %.9g | gate %g lvl %.9g A %.7g D %.7g S %.7g R %.7g\n", i, out[i], ref[i],
+                            pins[0][i], pins[5][i], pins[1][i], pins[2][i], pins[3][i], pins[4][i]);
+        char name[64];
+        std::snprintf(name, sizeof(name), "ug_adsr #%d", in->n);
+        report(name, r);
+    }
+}
+
 int main(int argc, char** argv) {
     if (argc < 2) { std::fprintf(stderr, "usage: %s trace\n", argv[0]); return 1; }
     Trace t;
     if (!t.load(argv[1])) { std::fprintf(stderr, "cannot read %s\n", argv[1]); return 1; }
     std::printf("%zu instances, %d blocks of %d\n", t.inst.size(), t.blocks, t.block);
     checkVca(t);
+    checkCrossFade(t);
+    checkAdsr(t);
     return 0;
 }
