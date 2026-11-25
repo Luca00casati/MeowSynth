@@ -1,0 +1,351 @@
+SynthEdit file version 110000, plugin 'MeowSynth' (MeowSynth.dll), skin 'meow'
+about: 'MEOWSynth v.1.0\r\n\r\nhttp://knobster.org/projects/meowsynth/'
+
+== Container #54 Container "Main" (1 objects)
+  == Container #63 Container "Meow" (70 objects)
+    GUI #277 Image "Bitmap Image"  [Filename=panels.png, Mouse Down=0]
+    #282 IO Mod
+    #459 Midi to CV  [Channel=-1, Aftertouch=0, Retrigger=1, Mono Note Priority=3]
+    #464 Oscillator  [Pulse Width=5, Waveform=2, Phase Mod=0, Freq Scale=0, PM Depth=5, Smooth Peaks (Gibbs Effect)=0, Sync X-Fade (Anti Alias)=0]
+    #472 ADSR
+    #473 VCA  [Response Curve=1]
+    #603 ADSR  [Decay=5, Sustain=7, Release=4]
+    #607 VCA  [Response Curve=1]
+    GUI #609 Slider "Vibrato Attack"  [pin0=-1, pin1=0, MIDI CC=-1, pin4=0, pin5=0, Min=0.000, Max=10.000, pin9=3, pin10=0, pin11=0] presets=[10.0, 9.05, 6.6, 10.0, 10.0, 10.0]
+    GUI #621 Slider "Vibrato Amount"  [pin0=-1, pin1=0, MIDI CC=1, pin4=0, pin5=0, Min=0.000, Max=10.000, pin9=3, pin10=0, pin11=0] presets=[0.0, 10.0, 7.1, 1.5, 1.05, 10.0]
+    GUI #633 Slider "M"  [pin0=-1, pin1=0, MIDI CC=-1, pin4=0, pin5=0, Min=0.000, Max=10.000, pin9=3, pin10=0, pin11=0] presets=[2.9, 3.4, 3.35, 2.4, 2.3, 3.7]
+    #645 Oscillator  [Pulse Width=5, Waveform=5, Sync=0, Phase Mod=0, Freq Scale=0, PM Depth=5, Smooth Peaks (Gibbs Effect)=0, Sync X-Fade (Anti Alias)=0]
+    #654 X-Mix  [Fade Law=1]
+    GUI #656 Slider "Noise"  [pin0=-1, pin1=0, MIDI CC=-1, pin4=0, pin5=0, Min=-5, Max=-4, pin9=3, pin10=0, pin11=0] presets=[-5.0, -4.0, -4.73, -4.0, -4.95, -4.0]
+    #668 ADSR  [Attack=0, Decay=5, Sustain=7, Release=4, Overall Level=10]
+    #674 VCA  [Response Curve=1]
+    GUI #676 Slider "W"  [pin0=-1, pin1=0, MIDI CC=-1, pin4=0, pin5=0, Min=0.000, Max=10.000, pin9=3, pin10=0, pin11=0] presets=[4.3168, 4.4168, 4.2168, 3.8668, 2.9668, 5.4668]
+    GUI #688 Slider "Portamento time"  [pin0=-1, pin1=0, MIDI CC=5, pin4=1, pin5=0, Min=4, Max=10.000, pin9=3, pin10=0, pin11=0] presets=[5.56]
+    GUI #700 Slider "E"  [pin0=-1, pin1=0, MIDI CC=-1, pin4=0, pin5=0, Min=0.000, Max=10.000, pin9=3, pin10=0, pin11=0] presets=[2.1, 3.35, 2.55, 4.05, 4.0, 4.75]
+    GUI #712 Slider "O"  [pin0=-1, pin1=0, MIDI CC=-1, pin4=0, pin5=0, Min=0.000, Max=10.000, pin9=3, pin10=0, pin11=0] presets=[7.2, 7.55, 7.6, 6.95, 6.8, 10.0]
+    GUI #1125 Slider "Chorus"  [pin0=-1, pin1=0, MIDI CC=-1, pin4=0, pin5=0, Min=-5.000, Max=5.000, pin9=3, pin10=0, pin11=0] presets=[-5.0, 2.25, -4.75, 4.75, 0.35, 4.75]
+    GUI #1164 Patch Select  [pin0=-1]
+    GUI #1166 Image "Bitmap Image"  [Filename=URL.png, Mouse Down=0]
+    GUI #1170 Float To Bool "Float to Bool"
+    GUI #1171 System Command2  [Command=4, Filename=http://knobster.org/projects/meowsynth/]
+    -- wiring
+      #1170 Float To Bool "Float to Bool".Out  ->  #1171 System Command2.Trigger
+      #1166 Image "Bitmap Image".Animation Position  ->  #1170 Float To Bool "Float to Bool".In
+      #1164 Patch Select.pin2  ->  #282 IO Mod.MIDI Out
+      #282 IO Mod.MIDI In  ->  #1164 Patch Select.pin1
+      #1125 Slider "Chorus".Value Out  ->  #754 Container "Chorus".Chorus
+      #472 ADSR.Signal Out  ->  #724 Container "Animation".Volts
+      #700 Slider "E".Value Out  ->  #472 ADSR.Sustain
+      #688 Slider "Portamento time".Value Out  ->  #459 Midi to CV.Portamento Time
+      #676 Slider "W".Value Out  ->  #472 ADSR.Release
+      #645 Oscillator.Audio Out  ->  #674 VCA.Signal
+      #668 ADSR.Signal Out  ->  #674 VCA.Volume
+      #674 VCA.Output  ->  #654 X-Mix.Input A
+      #459 Midi to CV.Gate  ->  #668 ADSR.Gate
+      #656 Slider "Noise".Value Out  ->  #654 X-Mix.Mix
+      #473 VCA.Output  ->  #654 X-Mix.Input B
+      #654 X-Mix.Signal Out  ->  #284 Container.Input
+      #654 X-Mix.Signal Out  ->  #284 Container.Input
+      #459 Midi to CV.Pitch  ->  #645 Oscillator.Pitch
+      #633 Slider "M".Value Out  ->  #472 ADSR.Attack
+      #621 Slider "Vibrato Amount".Value Out  ->  #603 ADSR.Overall Level
+      #609 Slider "Vibrato Attack".Value Out  ->  #603 ADSR.Attack
+      #475 Container "Tempo Sync LFO".Audio Out  ->  #607 VCA.Signal
+      #603 ADSR.Signal Out  ->  #607 VCA.Volume
+      #607 VCA.Output  ->  #464 Oscillator.Pitch
+      #459 Midi to CV.Gate  ->  #603 ADSR.Gate
+      #464 Oscillator.Audio Out  ->  #473 VCA.Signal
+      #472 ADSR.Signal Out  ->  #473 VCA.Volume
+      #459 Midi to CV.Gate  ->  #472 ADSR.Gate
+      #459 Midi to CV.Velocity  ->  #472 ADSR.Overall Level
+      #459 Midi to CV.Pitch  ->  #464 Oscillator.Pitch
+      #459 Midi to CV.Gate  ->  #464 Oscillator.Sync
+      #282 IO Mod.MIDI In  ->  #459 Midi to CV.MIDI In
+      #712 Slider "O".Value Out  ->  #472 ADSR.Decay
+      #284 Container.Signal Out  ->  #754 Container "Chorus".Input
+      #284 Container.Signal Out  ->  #754 Container "Chorus".Input
+      #754 Container "Chorus".Output  ->  #282 IO Mod.Signal Out
+      #754 Container "Chorus".Output  ->  #282 IO Mod.Signal Out
+      #1137 Container "Waveform".Choice  ->  #459 Midi to CV.Mono Mode
+      #1174 Container "Waveform".Choice  ->  #459 Midi to CV.Bend Range
+    -- patch memory (presets: ['(0)', 'Clear cat', 'Old cat', 'March cat', 'Catband', 'Gospel cats'])
+      'Phase'                      float  -> #892 PatchMemFloatIn "Patch Mem - Float".Value  [0.32543, 0.0, 0.0, 0.0, 0.0, 0.0]
+      'Waveform'                   enum   -> #595 PatchMemListIn2 "Waveform".Value  [7, 0, 0, 9, 9, 0]
+      'Min'                        float  -> #1097 PatchMemFloatIn "Patch Mem - Float".Value  [1.15, 0.0, 0.0, 0.0, 0.0, 0.0]
+      'Rate'                       float  -> #958 PatchMemFloatIn "Patch Mem - Float".Value  [-9.06962, 0.0, 0.0, 0.0, 0.0, 0.0]
+      'Waveform'                   enum   -> #747 PatchMemListIn2 "Waveform".Value  [6, 0, 0, 0, 0, 0]
+      'KDL Volts2GuiInt'           int    -> #749 KDL Volts2GuiInt.DSP 2 GUI - In  [0, 0, 0, 0, 0, 0]
+      'Depth'                      float  -> #1029 PatchMemFloatIn "Patch Mem - Float".Value  [4.19133, 0.0, 0.0, 0.0, 0.0, 0.0]
+      'KDL Volts2GuiInt'           int    -> #749 KDL Volts2GuiInt.Int  [0, 0, 0, 0, 0, 0]
+      'KDL Volts2GuiInt'           enum   -> #749 KDL Volts2GuiInt.Sampling Method  [1, 1, 1, 1, 1, 1]
+      'Waveform'                   enum   -> #1193 PatchMemListIn2 "Waveform".Value  [11, 1, 1, 0, 11, 0]
+      'KDL Volts2GuiInt'           float  -> #749 KDL Volts2GuiInt.Sample Rate (Hz)  [40.0, 40.0, 40.0, 40.0, 40.0, 40.0]
+      'KDL Volts2GuiInt'           enum   -> #749 KDL Volts2GuiInt.Rounding Mode  [0, 0, 0, 0, 0, 0]
+      'Waveform'                   enum   -> #1156 PatchMemListIn2 "Waveform".Value  [1, 1, 1, 0, 0, 0]
+      'Patch Mem - Text'           filename -> #1048 Patch Mem - Text in "Patch Mem - Text".Value  ['ms', '', '', '', '', '']
+      'Hz'                         float  -> #978 PatchMemFloatOut "Patch Mem - Float Out".Value  [0.02559, 0.0, 0.0, 0.0, 0.0, 0.0]
+      'Patch Mem - Text'           filename -> #1116 Patch Mem - Text in "Patch Mem - Text".Value  ['ms', '', '', '', '', '']
+    == Container #284 Container (46 objects)
+      #344 IO Mod
+      #346 IO Mod
+      #348 DH_MultiFilter2 1.0.1+ "DH_MultiFilter2"  [Gain Compensation=1, Filter Stages=0, Input Mode=1]
+      #352 DH_MultiFilter2 1.0.1+ "DH_MultiFilter2"  [Gain Compensation=1, Filter Stages=0, Input Mode=1]
+      GUI #356 Slider "Cutoff"  [pin0=-1, pin1=0, MIDI CC=-1, pin4=0, pin5=0, Min=0, Max=10, pin9=1, pin10=0, pin11=1] presets=[4.3, 4.3, 4.3, 4.3, 4.3, 4.3]
+      GUI #368 Slider "Q"  [pin0=-1, pin1=0, MIDI CC=-1, pin4=0, pin5=0, Min=0, Max=10, pin9=1, pin10=0, pin11=1] presets=[7.8, 7.8, 7.8, 7.8, 7.8, 7.8]
+      GUI #380 List Entry "Filter Type"  [pin0=-1, pin1=0, MIDI CC=-1, pin4=0, pin5=0, Min=0, Max=0] presets=[0, 0, 0, 0, 0, 0]
+      #389 X-Mix  [Fade Law=1]
+      #391 X-Mix  [Fade Law=1]
+      GUI #393 Slider "Dry/Wet"  [pin0=-1, pin1=0, MIDI CC=-1, pin4=0, pin5=0, Min=-5.000, Max=5.000, pin9=2, pin10=0, pin11=1] presets=[5.0, 5.0, 5.0, 5.0, 5.0, 5.0]
+      #405 Peak Follower
+      GUI #406 Slider "Decay"  [pin0=-1, pin1=0, MIDI CC=-1, pin4=0, pin5=0, Min=0.000, Max=10.000, pin9=1, pin10=0, pin11=1] presets=[10.0, 10.0, 10.0, 10.0, 10.0, 10.0]
+      GUI #418 Slider "Attack"  [pin0=-1, pin1=0, MIDI CC=-1, pin4=0, pin5=0, Min=0.000, Max=10.000, pin9=1, pin10=0, pin11=1] presets=[4.8, 4.8, 4.8, 4.8, 4.8, 4.8]
+      #430 VCA  [Response Curve=1]
+      #432 VCA  [Response Curve=1]
+      GUI #434 Slider "Gain"  [pin0=-1, pin1=0, MIDI CC=-1, pin4=0, pin5=0, Min=0.000, Max=10.000, pin9=1, pin10=0, pin11=1] presets=[10.0, 10.0, 10.0, 10.0, 10.0, 10.0]
+      #446 Level Adj
+      GUI #447 Slider "EnvMod"  [pin0=-1, pin1=0, MIDI CC=-1, pin4=0, pin5=0, Min=0.000, Max=10.000, pin9=1, pin10=0, pin11=1] presets=[10.0, 10.0, 10.0, 10.0, 10.0, 10.0]
+      -- wiring
+        #380 List Entry "Filter Type".Value Out  ->  #348 DH_MultiFilter2 1.0.1+ "DH_MultiFilter2".Filter Type
+        #344 IO Mod.Input  ->  #348 DH_MultiFilter2 1.0.1+ "DH_MultiFilter2".Input
+        #344 IO Mod.Input  ->  #352 DH_MultiFilter2 1.0.1+ "DH_MultiFilter2".Input
+        #356 Slider "Cutoff".Value Out  ->  #348 DH_MultiFilter2 1.0.1+ "DH_MultiFilter2".Freq(Hz) | Pitch(v)
+        #356 Slider "Cutoff".Value Out  ->  #352 DH_MultiFilter2 1.0.1+ "DH_MultiFilter2".Freq(Hz) | Pitch(v)
+        #368 Slider "Q".Value Out  ->  #348 DH_MultiFilter2 1.0.1+ "DH_MultiFilter2".Q | Res(v)
+        #368 Slider "Q".Value Out  ->  #352 DH_MultiFilter2 1.0.1+ "DH_MultiFilter2".Q | Res(v)
+        #380 List Entry "Filter Type".Value Out  ->  #352 DH_MultiFilter2 1.0.1+ "DH_MultiFilter2".Filter Type
+        #348 DH_MultiFilter2 1.0.1+ "DH_MultiFilter2".Output  ->  #391 X-Mix.Input A
+        #352 DH_MultiFilter2 1.0.1+ "DH_MultiFilter2".Output  ->  #389 X-Mix.Input A
+        #344 IO Mod.Input  ->  #391 X-Mix.Input B
+        #344 IO Mod.Input  ->  #389 X-Mix.Input B
+        #393 Slider "Dry/Wet".Value Out  ->  #391 X-Mix.Mix
+        #393 Slider "Dry/Wet".Value Out  ->  #389 X-Mix.Mix
+        #344 IO Mod.Input  ->  #405 Peak Follower.Signal in
+        #344 IO Mod.Input  ->  #405 Peak Follower.Signal in
+        #418 Slider "Attack".Value Out  ->  #405 Peak Follower.Attack
+        #406 Slider "Decay".Value Out  ->  #405 Peak Follower.Decay
+        #389 X-Mix.Signal Out  ->  #432 VCA.Signal
+        #391 X-Mix.Signal Out  ->  #430 VCA.Signal
+        #430 VCA.Output  ->  #346 IO Mod.Signal Out
+        #432 VCA.Output  ->  #346 IO Mod.Signal Out
+        #434 Slider "Gain".Value Out  ->  #430 VCA.Volume
+        #434 Slider "Gain".Value Out  ->  #432 VCA.Volume
+        #405 Peak Follower.Signal Out  ->  #446 Level Adj.Input 1
+        #447 Slider "EnvMod".Value Out  ->  #446 Level Adj.Input 2
+        #446 Level Adj.Output  ->  #348 DH_MultiFilter2 1.0.1+ "DH_MultiFilter2".Freq(Hz) | Pitch(v)
+        #446 Level Adj.Output  ->  #352 DH_MultiFilter2 1.0.1+ "DH_MultiFilter2".Freq(Hz) | Pitch(v)
+    == Container #475 Container "Tempo Sync LFO" (35 objects)
+      #534 Fixed Values  [Spare Value=0]
+      #536 Switch (Many->1) "Divisions"
+      #538 Divide
+      #539 Fixed Values "4b"  [Spare Value=0]
+      #541 Fixed Values "2b"  [Spare Value=0]
+      #543 Fixed Values "1b"  [Spare Value=0]
+      #545 Fixed Values "2/1"  [Spare Value=0]
+      #547 Fixed Values "1/1"  [Spare Value=0]
+      #549 Fixed Values "1/16"  [Spare Value=0]
+      #551 Fixed Values "1/12"  [Spare Value=0]
+      #553 Fixed Values "1/8"  [Spare Value=0]
+      #555 Fixed Values "1/4"  [Spare Value=0]
+      #557 Fixed Values "1/2"  [Spare Value=0]
+      #559 Oscillator  [Pulse Width=5, Waveform=0, Sync=0, Phase Mod=0, Freq Scale=1, PM Depth=5, Smooth Peaks (Gibbs Effect)=1, Sync X-Fade (Anti Alias)=1]
+      #568 Multiply
+      #569 IO Mod
+      #571 Synthedit BPM Clock V2 "BPM Clock2"  [Pulse Divide=4]
+      -- wiring
+        #576 Container "Waveform".Choice  ->  #536 Switch (Many->1) "Divisions".Choice
+        #571 Synthedit BPM Clock V2 "BPM Clock2".Tempo Out  ->  #538 Divide.Input 1
+        #538 Divide.Output  ->  #559 Oscillator.Pitch
+        #568 Multiply.Output  ->  #538 Divide.Input 2
+        #559 Oscillator.Audio Out  ->  #569 IO Mod.Audio Out
+        #536 Switch (Many->1) "Divisions".Input  ->  #568 Multiply.Input 2
+        #534 Fixed Values.60000  ->  #568 Multiply.Input 1
+        #549 Fixed Values "1/16".0.0625  ->  #536 Switch (Many->1) "Divisions". 1/16
+        #551 Fixed Values "1/12".0.08333  ->  #536 Switch (Many->1) "Divisions". 1/12
+        #553 Fixed Values "1/8".0.125  ->  #536 Switch (Many->1) "Divisions". 1/8
+        #555 Fixed Values "1/4".0.25  ->  #536 Switch (Many->1) "Divisions". 1/4
+        #557 Fixed Values "1/2".0.5  ->  #536 Switch (Many->1) "Divisions". 1/2
+        #547 Fixed Values "1/1".1  ->  #536 Switch (Many->1) "Divisions". 1/1
+        #545 Fixed Values "2/1".2  ->  #536 Switch (Many->1) "Divisions". 2/1
+        #543 Fixed Values "1b".4  ->  #536 Switch (Many->1) "Divisions". 1b
+        #541 Fixed Values "2b".8  ->  #536 Switch (Many->1) "Divisions". 2b
+        #539 Fixed Values "4b".16  ->  #536 Switch (Many->1) "Divisions". 4b
+      == Container #576 Container "Waveform" (10 objects)
+        #593 IO Mod
+        GUI #595 PatchMemListIn2 "Waveform"  [Name=Waveform]
+        GUI #597 Image "Bitmap Image"  [Filename=Z:\Software\SynthEdit\skins\meow\LFO.png, Mouse Down=0]
+        GUI #600 Image to Frame
+        #601 Synthedit Int To List2 "Int To List2"  [Mode=0]
+        -- wiring
+          #601 Synthedit Int To List2 "Int To List2".Out  ->  #595 PatchMemListIn2 "Waveform".Value
+          #597 Image "Bitmap Image".Animation Position  ->  #600 Image to Frame.Animation Position
+          #600 Image to Frame.Frame Number  ->  #601 Synthedit Int To List2 "Int To List2".In
+          #597 Image "Bitmap Image".Frame Count  ->  #600 Image to Frame.Frame Count
+          #595 PatchMemListIn2 "Waveform".pin2  ->  #593 IO Mod.Choice
+    == Container #724 Container "Animation" (13 objects)
+      #742 IO Mod
+      #744 Synthedit Int To List2 "Int To List2"  [Mode=0]
+      GUI #746 Image to Frame
+      GUI #747 PatchMemListIn2 "Waveform"  [Name=Waveform]
+      #749 KDL Volts2GuiInt  [DSP 2 GUI - In=0, Sampling Method=1, Sample Rate (Hz)=40, Rounding Mode=0]
+      GUI #751 Image "Bitmap Image"  [Filename=baks.png, Mouse Down=0]
+      -- wiring
+        #747 PatchMemListIn2 "Waveform".pin2  ->  #742 IO Mod.List Out
+        #749 KDL Volts2GuiInt.Int  ->  #744 Synthedit Int To List2 "Int To List2".In
+        #742 IO Mod.Volts  ->  #749 KDL Volts2GuiInt.DSP 2 GUI - Out
+        #744 Synthedit Int To List2 "Int To List2".Out  ->  #747 PatchMemListIn2 "Waveform".Value
+        #746 Image to Frame.Frame Number  ->  #744 Synthedit Int To List2 "Int To List2".In
+        #751 Image "Bitmap Image".Frame Count  ->  #746 Image to Frame.Frame Count
+        #751 Image "Bitmap Image".Animation Position  ->  #746 Image to Frame.Animation Position
+    == Container #754 Container "Chorus" (39 objects)
+      #813 Oscillator  [Pulse Width=5, Waveform=0, Sync=0, Phase Mod=0, Freq Scale=0, PM Depth=5, Smooth Peaks (Gibbs Effect)=1, Sync X-Fade (Anti Alias)=1]
+      #822 IO Mod
+      #824 IO Mod
+      #826 Delay2  [Delay Time (secs)=0.06, Interpolate Output=1, Feedback=0]
+      #830 X-Mix  [Fade Law=1]
+      #832 Delay2  [Delay Time (secs)=0.06, Interpolate Output=1, Feedback=0]
+      #836 X-Mix  [Fade Law=1]
+      #838 Level Adj
+      #839 Fixed Values  [Spare Value=0]
+      #841 Oscillator  [Pulse Width=5, Waveform=0, Sync=0, Freq Scale=0, PM Depth=5, Smooth Peaks (Gibbs Effect)=1, Sync X-Fade (Anti Alias)=1]
+      #849 Level Adj
+      #1123 IO Mod
+      -- wiring
+        #1123 IO Mod.Chorus  ->  #836 X-Mix.Mix
+        #1123 IO Mod.Chorus  ->  #830 X-Mix.Mix
+        #832 Delay2.Signal Out  ->  #836 X-Mix.Input A
+        #826 Delay2.Signal Out  ->  #830 X-Mix.Input A
+        #987 Container "Knob".Output  ->  #838 Level Adj.Input 2
+        #987 Container "Knob".Output  ->  #849 Level Adj.Input 2
+        #910 Container "Knob".Output  ->  #841 Oscillator.Pitch
+        #910 Container "Knob".Output  ->  #813 Oscillator.Pitch
+        #839 Fixed Values.5 Volt  ->  #849 Level Adj.Input 1
+        #841 Oscillator.Audio Out  ->  #849 Level Adj.Input 1
+        #822 IO Mod.Input  ->  #826 Delay2.Signal In
+        #822 IO Mod.Input  ->  #830 X-Mix.Input B
+        #822 IO Mod.Input  ->  #832 Delay2.Signal In
+        #822 IO Mod.Input  ->  #836 X-Mix.Input B
+        #813 Oscillator.Audio Out  ->  #838 Level Adj.Input 1
+        #839 Fixed Values.5 Volt  ->  #838 Level Adj.Input 1
+        #836 X-Mix.Signal Out  ->  #824 IO Mod.Output
+        #830 X-Mix.Signal Out  ->  #824 IO Mod.Output
+        #850 Container "Knob".Output  ->  #841 Oscillator.Phase Mod
+        #838 Level Adj.Output  ->  #826 Delay2.Modulation
+        #849 Level Adj.Output  ->  #832 Delay2.Modulation
+        #1055 Container "Knob".Output  ->  #832 Delay2.Modulation
+        #1055 Container "Knob".Output  ->  #826 Delay2.Modulation
+      == Container #850 Container "Knob" (18 objects)
+        GUI #875 Tinted Image "Tinted Bitmap Image"  [Filename=moog_knob_L2, Hue=10, Saturation=0, Brightness=10, Mouse Down=0]
+        GUI #882 Image "Bitmap Image"  [Filename=moog_knob, Mouse Down=0]
+        #886 IO Mod
+        GUI #888 Image "Bitmap Image"  [Filename=shiny_cap.png, Mouse Down=0]
+        GUI #892 PatchMemFloatIn "Patch Mem - Float"  [Min Value=0, Max Value=10]
+        #895 FloatToVolts "Float to Volts"  [pin0=2]
+        GUI #897 Text Entry2  [Style=3, Mode=1, Multiline=0]
+        GUI #901 Text To Float  [Decimal Places=1]
+        GUI #903 Text Entry2  [Style=3, Mode=1, Multiline=0]
+        GUI #907 UiFloatScaler "Float Scaler"  [Multiply by=0.055555, Add=0]
+        -- wiring
+          #903 Text Entry2.Text  ->  #901 Text To Float.Text
+          #892 PatchMemFloatIn "Patch Mem - Float".pin5  ->  #895 FloatToVolts "Float to Volts".pin1
+          #888 Image "Bitmap Image".Animation Position  ->  #892 PatchMemFloatIn "Patch Mem - Float".Animation Position
+          #882 Image "Bitmap Image".Animation Position  ->  #892 PatchMemFloatIn "Patch Mem - Float".Animation Position
+          #897 Text Entry2.Text  ->  #892 PatchMemFloatIn "Patch Mem - Float".Name
+          #895 FloatToVolts "Float to Volts".pin2  ->  #886 IO Mod.Output
+          #907 UiFloatScaler "Float Scaler".Value Out  ->  #892 PatchMemFloatIn "Patch Mem - Float".Value
+          #901 Text To Float.Value  ->  #907 UiFloatScaler "Float Scaler".Value In
+      == Container #910 Container "Knob" (24 objects)
+        GUI #941 Tinted Image "Tinted Bitmap Image"  [Filename=moog_knob_L2, Hue=10, Saturation=0, Brightness=10, Mouse Down=0]
+        GUI #948 Image "Bitmap Image"  [Filename=moog_knob, Mouse Down=0]
+        #952 IO Mod
+        GUI #954 Image "Bitmap Image"  [Filename=shiny_cap.png, Mouse Down=0]
+        GUI #958 PatchMemFloatIn "Patch Mem - Float"  [Value=-9.069625, Min Value=-10.4252, Max Value=-0.4594]
+        #961 FloatToVolts "Float to Volts"  [pin0=2]
+        GUI #963 Text Entry2  [Style=3, Mode=1, Multiline=0]
+        GUI #967 Text To Float  [Decimal Places=2]
+        GUI #969 Text Entry2  [Style=3, Mode=1, Multiline=0]
+        #973 KDL Volts2Hz  [Voltage for A4 (440hz)=5.0]
+        #975 VoltsToFloat "Volts to Float"  [pin1=4, pin2=10]
+        GUI #978 PatchMemFloatOut "Patch Mem - Float Out"  [Animation Position=0.002559, Min Value=0, Max Value=10]
+        GUI #983 Text Entry2  [Style=3, Mode=1, Multiline=0]
+        -- wiring
+          #983 Text Entry2.Text  ->  #978 PatchMemFloatOut "Patch Mem - Float Out".Name
+          #967 Text To Float.Value  ->  #978 PatchMemFloatOut "Patch Mem - Float Out".Value
+          #975 VoltsToFloat "Volts to Float".pin3  ->  #978 PatchMemFloatOut "Patch Mem - Float Out".pin3
+          #973 KDL Volts2Hz.Hertz  ->  #975 VoltsToFloat "Volts to Float".pin0
+          #961 FloatToVolts "Float to Volts".pin2  ->  #952 IO Mod.Output
+          #963 Text Entry2.Text  ->  #958 PatchMemFloatIn "Patch Mem - Float".Name
+          #948 Image "Bitmap Image".Animation Position  ->  #958 PatchMemFloatIn "Patch Mem - Float".Animation Position
+          #954 Image "Bitmap Image".Animation Position  ->  #958 PatchMemFloatIn "Patch Mem - Float".Animation Position
+          #958 PatchMemFloatIn "Patch Mem - Float".pin5  ->  #961 FloatToVolts "Float to Volts".pin1
+          #969 Text Entry2.Text  ->  #967 Text To Float.Text
+          #961 FloatToVolts "Float to Volts".pin2  ->  #973 KDL Volts2Hz.Volts
+      == Container #987 Container "Knob" (21 objects)
+        GUI #1012 Tinted Image "Tinted Bitmap Image"  [Filename=moog_knob_L2, Hue=10, Saturation=0, Brightness=10, Mouse Down=0]
+        GUI #1019 Image "Bitmap Image"  [Filename=moog_knob, Mouse Down=0]
+        #1023 IO Mod
+        GUI #1025 Image "Bitmap Image"  [Filename=shiny_cap.png, Mouse Down=0]
+        GUI #1029 PatchMemFloatIn "Patch Mem - Float"  [Min Value=0, Max Value=5]
+        #1032 FloatToVolts "Float to Volts"  [pin0=2]
+        GUI #1034 Text Entry2  [Style=3, Mode=1, Multiline=0]
+        GUI #1038 Text To Float  [Decimal Places=2]
+        GUI #1040 Text Entry2  [Style=3, Mode=1, Multiline=0]
+        GUI #1044 Text Entry2  [Style=3, Mode=1, Multiline=0]
+        GUI #1048 Patch Mem - Text in "Patch Mem - Text"  [File Dialog=0, Name=Patch Mem - Text]
+        GUI #1052 UiFloatScaler "Float Scaler"  [Multiply by=0.166667, Add=0]
+        -- wiring
+          #1044 Text Entry2.Text  ->  #1048 Patch Mem - Text in "Patch Mem - Text".Value
+          #1040 Text Entry2.Text  ->  #1038 Text To Float.Text
+          #1029 PatchMemFloatIn "Patch Mem - Float".pin5  ->  #1032 FloatToVolts "Float to Volts".pin1
+          #1025 Image "Bitmap Image".Animation Position  ->  #1029 PatchMemFloatIn "Patch Mem - Float".Animation Position
+          #1019 Image "Bitmap Image".Animation Position  ->  #1029 PatchMemFloatIn "Patch Mem - Float".Animation Position
+          #1034 Text Entry2.Text  ->  #1029 PatchMemFloatIn "Patch Mem - Float".Name
+          #1032 FloatToVolts "Float to Volts".pin2  ->  #1023 IO Mod.Output
+          #1052 UiFloatScaler "Float Scaler".Value Out  ->  #1029 PatchMemFloatIn "Patch Mem - Float".Value
+          #1038 Text To Float.Value  ->  #1052 UiFloatScaler "Float Scaler".Value In
+      == Container #1055 Container "Knob" (21 objects)
+        GUI #1080 Tinted Image "Tinted Bitmap Image"  [Filename=moog_knob_L2, Hue=10, Saturation=0, Brightness=10, Mouse Down=0]
+        GUI #1087 Image "Bitmap Image"  [Filename=moog_knob, Mouse Down=0]
+        #1091 IO Mod
+        GUI #1093 Image "Bitmap Image"  [Filename=shiny_cap.png, Mouse Down=0]
+        GUI #1097 PatchMemFloatIn "Patch Mem - Float"  [Min Value=0, Max Value=5]
+        #1100 FloatToVolts "Float to Volts"  [pin0=2]
+        GUI #1102 Text Entry2  [Style=3, Mode=1, Multiline=0]
+        GUI #1106 Text To Float  [Decimal Places=2]
+        GUI #1108 Text Entry2  [Style=3, Mode=1, Multiline=0]
+        GUI #1112 Text Entry2  [Style=3, Mode=1, Multiline=0]
+        GUI #1116 Patch Mem - Text in "Patch Mem - Text"  [File Dialog=0, Name=Patch Mem - Text]
+        GUI #1120 UiFloatScaler "Float Scaler"  [Multiply by=0.166667, Add=0]
+        -- wiring
+          #1106 Text To Float.Value  ->  #1120 UiFloatScaler "Float Scaler".Value In
+          #1120 UiFloatScaler "Float Scaler".Value Out  ->  #1097 PatchMemFloatIn "Patch Mem - Float".Value
+          #1100 FloatToVolts "Float to Volts".pin2  ->  #1091 IO Mod.Output
+          #1102 Text Entry2.Text  ->  #1097 PatchMemFloatIn "Patch Mem - Float".Name
+          #1087 Image "Bitmap Image".Animation Position  ->  #1097 PatchMemFloatIn "Patch Mem - Float".Animation Position
+          #1093 Image "Bitmap Image".Animation Position  ->  #1097 PatchMemFloatIn "Patch Mem - Float".Animation Position
+          #1097 PatchMemFloatIn "Patch Mem - Float".pin5  ->  #1100 FloatToVolts "Float to Volts".pin1
+          #1108 Text Entry2.Text  ->  #1106 Text To Float.Text
+          #1112 Text Entry2.Text  ->  #1116 Patch Mem - Text in "Patch Mem - Text".Value
+    == Container #1137 Container "Waveform" (10 objects)
+      #1154 IO Mod
+      GUI #1156 PatchMemListIn2 "Waveform"  [Name=Waveform]
+      GUI #1158 Image "Bitmap Image"  [Filename=polycat.png, Mouse Down=0]
+      GUI #1161 Image to Frame
+      #1162 Synthedit Int To List2 "Int To List2"  [Mode=0]
+      -- wiring
+        #1162 Synthedit Int To List2 "Int To List2".Out  ->  #1156 PatchMemListIn2 "Waveform".Value
+        #1158 Image "Bitmap Image".Animation Position  ->  #1161 Image to Frame.Animation Position
+        #1161 Image to Frame.Frame Number  ->  #1162 Synthedit Int To List2 "Int To List2".In
+        #1158 Image "Bitmap Image".Frame Count  ->  #1161 Image to Frame.Frame Count
+        #1156 PatchMemListIn2 "Waveform".pin2  ->  #1154 IO Mod.Choice
+    == Container #1174 Container "Waveform" (10 objects)
+      #1191 IO Mod
+      GUI #1193 PatchMemListIn2 "Waveform"  [Name=Waveform]
+      GUI #1195 Image "Bitmap Image"  [Filename=pitchrange.png, Mouse Down=0]
+      GUI #1198 Image to Frame
+      #1199 Synthedit Int To List2 "Int To List2"  [Mode=0]
+      -- wiring
+        #1193 PatchMemListIn2 "Waveform".pin2  ->  #1191 IO Mod.Choice
+        #1195 Image "Bitmap Image".Frame Count  ->  #1198 Image to Frame.Frame Count
+        #1198 Image to Frame.Frame Number  ->  #1199 Synthedit Int To List2 "Int To List2".In
+        #1195 Image "Bitmap Image".Animation Position  ->  #1198 Image to Frame.Animation Position
+        #1199 Synthedit Int To List2 "Int To List2".Out  ->  #1193 PatchMemListIn2 "Waveform".Value

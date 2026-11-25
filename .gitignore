@@ -1,0 +1,10 @@
+# Original binaries and anything extracted from them stay out of the repo:
+# extract them from your own copy of MeowSynth.dll (see tools/).
+*.dll
+*.se1
+*.sem
+*.png
+extracted/
+assets/interface/
+build/
+__pycache__/

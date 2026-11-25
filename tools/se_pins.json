@@ -1,0 +1,638 @@
+{
+ "ADSR": {
+  "class": "ug_adsr",
+  "source": "runtime ListInterface (vtable slot 12)",
+  "pins": [
+   {
+    "name": "Gate",
+    "default": "1",
+    "list": "",
+    "hint": "Triggers the Attack phase when greater then 0 V "
+   },
+   {
+    "name": "Attack",
+    "default": "0",
+    "list": "0 V is quickest, 10 V slowest, ",
+    "hint": "Controls the rate of the attack"
+   },
+   {
+    "name": "Decay",
+    "default": "5",
+    "list": "",
+    "hint": "The Decay rate"
+   },
+   {
+    "name": "Sustain",
+    "default": "7",
+    "list": "while the gate is high (key is down), ",
+    "hint": "The 'hold' level"
+   },
+   {
+    "name": "Release",
+    "default": "4",
+    "list": "",
+    "hint": "The Release rate"
+   },
+   {
+    "name": "Overall Level",
+    "default": "10",
+    "list": "",
+    "hint": "Controls the overall output level.  Handy for adding Velocity sensitivity"
+   },
+   {
+    "name": "Signal Out",
+    "default": "0",
+    "list": "",
+    "hint": ""
+   }
+  ]
+ },
+ "Delay2": {
+  "class": "ug_delay2",
+  "source": "runtime ListInterface (vtable slot 12)",
+  "pins": [
+   {
+    "name": "Signal In",
+    "default": "",
+    "list": "",
+    "hint": ""
+   },
+   {
+    "name": "Modulation",
+    "default": "10",
+    "list": "10,0,10,0",
+    "hint": "Varies the delay time dynamically ( 0 to 10V )"
+   },
+   {
+    "name": "Signal Out",
+    "default": "",
+    "list": "",
+    "hint": ""
+   },
+   {
+    "name": "Delay Time (secs)",
+    "default": "1.0",
+    "list": "",
+    "hint": "Max delay time in Seconds. Limited to maximum 10s."
+   },
+   {
+    "name": "Interpolate Output",
+    "default": "0",
+    "list": "but increases CPU load, ",
+    "hint": "Provides smoother modulation of delay time"
+   },
+   {
+    "name": "Feedback",
+    "default": "0",
+    "list": "10,0,10,0",
+    "hint": ""
+   }
+  ]
+ },
+ "Divide": {
+  "class": "ug_math_div",
+  "source": "runtime ListInterface (vtable slot 12)",
+  "pins": [
+   {
+    "name": "Input 1",
+    "default": "8",
+    "list": "",
+    "hint": "Input 1 is Divided by Input 2"
+   },
+   {
+    "name": "Input 2",
+    "default": "8",
+    "list": "",
+    "hint": ""
+   },
+   {
+    "name": "Output",
+    "default": "0",
+    "list": "",
+    "hint": ""
+   }
+  ]
+ },
+ "Fixed Values": {
+  "class": "ug_fixed_values",
+  "source": "runtime ListInterface (vtable slot 12)",
+  "pins": [
+   {
+    "name": "Spare Value",
+    "default": "0",
+    "list": "",
+    "hint": "Pre-Set Voltage"
+   }
+  ]
+ },
+ "IO Mod": {
+  "class": "ug_io_mod",
+  "source": "runtime ListInterface (vtable slot 12)",
+  "pins": [
+   {
+    "name": "Spare",
+    "default": "0",
+    "list": "",
+    "hint": "Connection to modules outside (at higher level of structure)"
+   }
+  ]
+ },
+ "Level Adj": {
+  "class": "ug_multiplier",
+  "source": "runtime ListInterface (vtable slot 12)",
+  "pins": [
+   {
+    "name": "Input 1",
+    "default": "8",
+    "list": "(5 * 2 ) / 10 , ",
+    "hint": "The 2 inputs are Multiplied. Then 'normalised' eg 5V multiplied by 2 V = 1V"
+   },
+   {
+    "name": "Input 2",
+    "default": "8",
+    "list": "",
+    "hint": ""
+   },
+   {
+    "name": "Output",
+    "default": "0",
+    "list": "",
+    "hint": ""
+   }
+  ]
+ },
+ "Midi to CV": {
+  "class": "ug_midi_to_cv",
+  "source": "runtime ListInterface (vtable slot 12)",
+  "pins": [
+   {
+    "name": "MIDI In",
+    "default": "",
+    "list": "",
+    "hint": "(implicit MIDI pin)"
+   },
+   {
+    "name": "Channel",
+    "default": "-1",
+    "list": "",
+    "hint": "(implicit, -1 = all)"
+   },
+   {
+    "name": "Bend Range",
+    "default": "12",
+    "list": "range 0,12",
+    "hint": "Maximum MIDI bender range in semitones"
+   },
+   {
+    "name": "Gate",
+    "default": "0",
+    "list": "",
+    "hint": "Use this to control an envelope (ADSR)"
+   },
+   {
+    "name": "Pitch",
+    "default": "0",
+    "list": "",
+    "hint": "Use this to control an Oscillator or Filter Pitch"
+   },
+   {
+    "name": "Velocity",
+    "default": "0",
+    "list": "",
+    "hint": "Provides MIDI velocity level (How fast you hit the key)"
+   },
+   {
+    "name": "Aftertouch",
+    "default": "0",
+    "list": "",
+    "hint": "Provides MIDI Aftertouch level"
+   },
+   {
+    "name": "Mono Mode",
+    "default": "0",
+    "list": "On=1,Off=0",
+    "hint": "Limit sound to one voice. Enables the Retrigger option"
+   },
+   {
+    "name": "Retrigger",
+    "default": "1",
+    "list": "On=1,Off=0",
+    "hint": "Retrigger Envelopes when playing legato (you hit a note before releasing previous). Used with Mono Mode."
+   },
+   {
+    "name": "Portamento Time",
+    "default": "0",
+    "list": "",
+    "hint": "Time for pitch to slide to a new note (When you play legato)"
+   },
+   {
+    "name": "Mono Note Priority",
+    "default": "3",
+    "list": "Off,Low,High,Last",
+    "hint": ""
+   }
+  ]
+ },
+ "Multiply": {
+  "class": "ug_math_mult",
+  "source": "runtime ListInterface (vtable slot 12)",
+  "pins": [
+   {
+    "name": "Input 1",
+    "default": "8",
+    "list": "",
+    "hint": "The 2 inputs are Multiplied"
+   },
+   {
+    "name": "Input 2",
+    "default": "8",
+    "list": "",
+    "hint": ""
+   },
+   {
+    "name": "Output",
+    "default": "0",
+    "list": "",
+    "hint": ""
+   }
+  ]
+ },
+ "Oscillator": {
+  "class": "ug_oscillator2",
+  "source": "runtime ListInterface (vtable slot 12)",
+  "pins": [
+   {
+    "name": "Pitch",
+    "default": "5",
+    "list": "5V = Middle A, 100, 0, 10, 0",
+    "hint": "1 Volt per Octave"
+   },
+   {
+    "name": "Pulse Width",
+    "default": "5",
+    "list": "",
+    "hint": "Width of rectangular pulse. -10 to 10 Volts = 0 to 100%"
+   },
+   {
+    "name": "Waveform",
+    "default": "1",
+    "list": "Sine, Saw, Ramp, Triangle, Pulse,White Noise,Pink Noise",
+    "hint": "Selects different wave shapes"
+   },
+   {
+    "name": "Audio Out",
+    "default": "0",
+    "list": "",
+    "hint": ""
+   },
+   {
+    "name": "Sync",
+    "default": "0",
+    "list": "usually another oscillator to produce a gnarly sound., 100, 0, 5, -5",
+    "hint": "Syncs this Oscillator to an external signal"
+   },
+   {
+    "name": "Phase Mod",
+    "default": "0",
+    "list": "used for yamaha style frequency modulation.  Don't work on Pulse waveform., 100, 0, 10, 0",
+    "hint": "Varies the phase (-5 to +5 Volts)"
+   },
+   {
+    "name": "Freq Scale",
+    "default": "0",
+    "list": "1 Volt/Octave, 1 Volt/kHz ",
+    "hint": "Switches between 1 Volt per Octave or 1 Volt per kHz response."
+   },
+   {
+    "name": "PM Depth",
+    "default": "5",
+    "list": "100, 0, 10, 0",
+    "hint": "Varies the phase modulation depth (0 to 10 Volts)"
+   },
+   {
+    "name": "Smooth Peaks (Gibbs Effect)",
+    "default": "1",
+    "list": "reduces wave 'brightness' though., ",
+    "hint": "Improves the Wave Appearance by rolling off upper harmonics"
+   },
+   {
+    "name": "Sync X-Fade (Anti Alias)",
+    "default": "1",
+    "list": "",
+    "hint": "Reduces Alias noise when Syncing at Audio rates. Can be disabled to provide precise note-on phase sync (usefull for phase modulation patches)"
+   }
+  ]
+ },
+ "Peak Follower": {
+  "class": "ug_peak_det",
+  "source": "runtime ListInterface (vtable slot 12)",
+  "pins": [
+   {
+    "name": "Signal in",
+    "default": "0",
+    "list": "",
+    "hint": "Input signal"
+   },
+   {
+    "name": "Attack",
+    "default": "8",
+    "list": "",
+    "hint": "Rate at which current_level rises to track input level"
+   },
+   {
+    "name": "Decay",
+    "default": "7",
+    "list": "",
+    "hint": "Rate at which current_level falls to track input level"
+   },
+   {
+    "name": "Signal Out",
+    "default": "0",
+    "list": "",
+    "hint": "current_level Signal"
+   }
+  ]
+ },
+ "Switch (Many->1)": {
+  "class": "ug_switch",
+  "source": "runtime ListInterface (vtable slot 12)",
+  "pins": [
+   {
+    "name": "Choice",
+    "default": "0",
+    "list": "{AUTO}",
+    "hint": "Chooses which output to route the input signal to.  Connect to a 'List Entry' module."
+   },
+   {
+    "name": "Input",
+    "default": "0",
+    "list": "",
+    "hint": ""
+   },
+   {
+    "name": "Spare Output",
+    "default": "",
+    "list": "",
+    "hint": ""
+   }
+  ]
+ },
+ "VCA": {
+  "class": "ug_vca",
+  "source": "runtime ListInterface (vtable slot 12)",
+  "pins": [
+   {
+    "name": "Signal",
+    "default": "0",
+    "list": "(5 * 2 ) / 10 , ",
+    "hint": "The 2 inputs are Multiplied (Ring Modulated). Then 'normalised' eg 5V multiplied by 2 V = 1V"
+   },
+   {
+    "name": "Volume",
+    "default": "8",
+    "list": "",
+    "hint": ""
+   },
+   {
+    "name": "Output",
+    "default": "0",
+    "list": "",
+    "hint": ""
+   },
+   {
+    "name": "Response Curve",
+    "default": "1",
+    "list": "2V to 0v gives -40db to -70db (silence), Exponential=1,Linear,Decibel,Decibel (old)=0",
+    "hint": "In db mode: 10V to 2V gives 0 to -40db"
+   }
+  ]
+ },
+ "X-Mix": {
+  "class": "ug_cross_fade",
+  "source": "runtime ListInterface (vtable slot 12)",
+  "pins": [
+   {
+    "name": "Input A",
+    "default": "0",
+    "list": "",
+    "hint": ""
+   },
+   {
+    "name": "Input B",
+    "default": "0",
+    "list": "",
+    "hint": ""
+   },
+   {
+    "name": "Mix",
+    "default": "0",
+    "list": "to -5V - Input B, 5,-5,5,-5",
+    "hint": "Varies the mix from +5V - Input A"
+   },
+   {
+    "name": "Signal Out",
+    "default": "5",
+    "list": "",
+    "hint": ""
+   },
+   {
+    "name": "Fade Law",
+    "default": "1",
+    "list": "Equal Intensity (0dB), Equal Power(+3dB), Sqr Root",
+    "hint": "Chooses different cross fade laws"
+   }
+  ]
+ },
+ "DH_MultiFilter2 1.0.1+": {
+  "class": "SEM",
+  "source": "SEM strings, order inferred",
+  "pins": [
+   {
+    "name": "Input"
+   },
+   {
+    "name": "Freq(Hz) | Pitch(v)"
+   },
+   {
+    "name": "Q | Res(v)"
+   },
+   {
+    "name": "Filter Type"
+   },
+   {
+    "name": "Gain Compensation"
+   },
+   {
+    "name": "Filter Stages"
+   },
+   {
+    "name": "Output"
+   },
+   {
+    "name": "Input Mode"
+   }
+  ]
+ },
+ "Synthedit BPM Clock V2": {
+  "class": "SEM",
+  "source": "SEM strings, order inferred",
+  "pins": [
+   {
+    "name": "Pulse Out"
+   },
+   {
+    "name": "Bar Start"
+   },
+   {
+    "name": "Tempo Out"
+   },
+   {
+    "name": "Transport Run"
+   },
+   {
+    "name": "Pulse Divide"
+   }
+  ]
+ },
+ "Synthedit Int To List2": {
+  "class": "SEM",
+  "source": "SEM strings, order inferred",
+  "pins": [
+   {
+    "name": "In"
+   },
+   {
+    "name": "Out"
+   },
+   {
+    "name": "Mode"
+   }
+  ]
+ },
+ "KDL Volts2Hz": {
+  "class": "SEM",
+  "source": "SEM strings, order inferred",
+  "pins": [
+   {
+    "name": "Volts"
+   },
+   {
+    "name": "Hertz"
+   },
+   {
+    "name": "Voltage for A4 (440hz)"
+   }
+  ]
+ },
+ "KDL Volts2GuiInt": {
+  "class": "SEM",
+  "source": "SEM strings, order inferred",
+  "pins": [
+   {
+    "name": "Volts"
+   },
+   {
+    "name": "DSP 2 GUI - In"
+   },
+   {
+    "name": "DSP 2 GUI - Out"
+   },
+   {
+    "name": "Int"
+   },
+   {
+    "name": "Rounding Mode"
+   },
+   {
+    "name": "Sample Rate (Hz)"
+   },
+   {
+    "name": "Sampling Method"
+   }
+  ]
+ },
+ "Slider": {
+  "class": "Ctl_Slider",
+  "source": "inferred from stored values (CC1 on Vibrato Amount, CC5 on Portamento)",
+  "pins": [
+   {
+    "name": "pin0"
+   },
+   {
+    "name": "pin1"
+   },
+   {
+    "name": "pin2"
+   },
+   {
+    "name": "MIDI CC"
+   },
+   {
+    "name": "pin4"
+   },
+   {
+    "name": "pin5"
+   },
+   {
+    "name": "Value Out"
+   },
+   {
+    "name": "Min"
+   },
+   {
+    "name": "Max"
+   },
+   {
+    "name": "pin9"
+   },
+   {
+    "name": "pin10"
+   },
+   {
+    "name": "pin11"
+   }
+  ]
+ },
+ "List Entry": {
+  "class": "Ctl_Combo",
+  "source": "inferred from stored values (CC1 on Vibrato Amount, CC5 on Portamento)",
+  "pins": [
+   {
+    "name": "pin0"
+   },
+   {
+    "name": "pin1"
+   },
+   {
+    "name": "pin2"
+   },
+   {
+    "name": "MIDI CC"
+   },
+   {
+    "name": "pin4"
+   },
+   {
+    "name": "pin5"
+   },
+   {
+    "name": "Value Out"
+   },
+   {
+    "name": "Min"
+   },
+   {
+    "name": "Max"
+   },
+   {
+    "name": "pin9"
+   },
+   {
+    "name": "pin10"
+   },
+   {
+    "name": "pin11"
+   }
+  ]
+ }
+}
