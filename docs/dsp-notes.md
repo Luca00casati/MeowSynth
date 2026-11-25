@@ -237,6 +237,14 @@ suspension or reset). This does not affect the output, because those voices are 
     cosine via a π/2 offset (`0x10014928`); `alpha = sin/(2Q)`, `a0inv = 1/(1 + alpha) + 1e-150`.
   - LP: `b1 = 1 - cos`, `b0 = b2 = b1 * 0.5`, `a1 = -2 cos` (× the constant at `0x1000f398`),
     `a2 = 1 - alpha`; everything is then multiplied by `a0inv`. HP/BP1/BP2/Notch are analogous.
+- Tables found in the dump (`tools/dump_module_memory.cpp`):
+  - `hz[i] = 440 * 2^((i - 3500)/500)`, capped at `0.99*fs/2`, indexed by `v*5000 + 1000`.
+  - `sin[k] = sin(k*0.001)` for k = 0..4713; cos is read at an index offset of 1570.796.
+  - `Q[i] = exp(exp(i/512*4.5)*0.05) - 0.6`, indexed by `res*512`. This is bit-exact with
+    `tools/x87emu.py`: x is computed first, `f2xm1` is kept at 64 bits, and `1 + p` is rounded to
+    53 bits.
+  - The gain-compensation table is an exponential of a cubic in `log(i*0.1748)`, times factors
+    interpolated from a 32 × 8 constant table (`0x1000f4c0`...).
 - Plan: dump the setup tables from the running original (the SEM is loaded as `dh_multifilter2.sem`
   at a relocated base; find it with `GetModuleHandle`), rebuild them, then port the loop from the
   assembly and check it against the `ug_plugin2` instances in the traces.
