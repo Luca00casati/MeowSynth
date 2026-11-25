@@ -245,6 +245,20 @@ suspension or reset). This does not affect the output, because those voices are 
     53 bits.
   - The gain-compensation table is an exponential of a cubic in `log(i*0.1748)`, times factors
     interpolated from a 32 × 8 constant table (`0x1000f4c0`...).
+- Exactness of the tables, rebuilt with `tools/x87emu.py`:
+  - Q table: exact.
+  - Sine table: exact. `fsin` reduces its argument with a 66-bit π, and its 64-bit result is
+    rounded to double.
+  - Hz table: 5 of 7001 entries differ in the last bit (indices 5017, 5352, 5517, 5852, 6017).
+    The table uses the CRT `pow`, and MSVC 7.1's CRT switches at runtime to an **SSE2 `pow`**
+    (`__use_sse2_mathfcns`), which is not correctly rounded. A correctly rounded `pow` misses the
+    same 5 entries; glibc misses 3.
+- **pow is a cross-cutting issue.** MeowSynth's own `FUN_100f6e40` is the same SSE2-capable CRT
+  `pow`, used by the oscillator pitch table, ADSR rates, portamento and the VCA dB curves. glibc
+  happens to match it at every input in the traces so far, but MSVC's UCRT `pow` (the 64-bit Windows
+  build) is not guaranteed to. To be safe everywhere, port the CRT's SSE2 `pow` (disassemble
+  `FUN_100f6e40`, or `FUN_10008b10` in the SEM) and use it for all of these, or ship the tables
+  precomputed.
 - Plan: dump the setup tables from the running original (the SEM is loaded as `dh_multifilter2.sem`
   at a relocated base; find it with `GetModuleHandle`), rebuild them, then port the loop from the
   assembly and check it against the `ug_plugin2` instances in the traces.
