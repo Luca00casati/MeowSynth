@@ -114,6 +114,61 @@ the zero crossing of 8 saw bands.
 - White noise (`0x100ac6f0`): `seed = seed * 0x19660d + 0x3c6ef35f` (a global shared by every noise
   oscillator, starting at 0), `out = asfloat(0x3f800000 | (seed & 0x7fffff)) - 1.5`.
 
+## Engine (SynthEdit runtime)
+
+Observed with `tools/trace_modules.cpp`, which finds module instances in memory by vtable and
+records every plug buffer:
+
+- **Blocks:** processing runs in internal blocks of 128 samples (`DAT_10199a68 = 128`), whatever
+  the host block size. Output is bit-identical with 128- and 512-sample host blocks.
+- **Polyphony:** the patch is 6-voice polyphonic. Everything up to and including the chorus is
+  cloned per voice (6 Midi to CV, 15 oscillators, 12 filters, 12 Delay2s, ...). SynthEdit inserts
+  an implicit `ug_adder` wherever two wires feed one input.
+- **Buffers:** a plug's buffer is at `plug+8`; outputs own it, inputs point at their source.
+  Module layout: `+0x34` sample clock, `+0x38` container (its `+0x4c` is the block start),
+  `+0x50`/`+0x54` plugs, `+0x68` process function.
+- **Events:** `ug_base::DoProcess` (`0x10071680`) runs the process function up to the next event's
+  timestamp, then hands the event to vtable slot 4. Blocks are therefore split exactly at events.
+- **Static / streaming:** a module picks its process function by which inputs are streaming.
+  An output that stops changing is reported static. Observed timing:
+  - the VCA switches to its static path on the sample after the volume's last change;
+  - the ADSR restarts its segment at the sample of the Overall Level's last change.
+- **Rounding mode:** some loops (VCA streaming, the generic table lookup `FUN_100dc760`, ...)
+  switch the x87 to round-toward-zero (`fnstcw` + `or 0xc3f`, saved at `0x1019a360`/`0x1019a364`).
+  `fesetround(FE_TOWARDZERO)` around the same code reproduces it (`src/dsp/Fpu.h`).
+- **FPU precision:** real Windows hosts run the x87 at 53-bit precision. The Wine tools set that
+  explicitly, since MinGW's startup code uses 64-bit.
+
+## Ported modules (bit-exact against the trace)
+
+- VCA (`src/dsp/Vca.*`): curve 1 table
+  `t[i] = 1 - (1 - e^{-3(1 - i/512)}) * (float)(1/(1 - e^{-3}))` (514 entries). Streaming volume
+  uses the chop-mode interpolation `(t[i] + (t[i+1]-t[i])*frac) * signal` with `i = trunc(v*512)`;
+  static volume uses the formula directly.
+- X-Mix (`src/dsp/CrossFade.*`): law 1 table `sin(i * (float)(pi/1024))`. Position
+  `f = clamp(0.5 - mix, 0, 1)`, then `out = A*gain(1-f) + B*gain(f)`. In the streaming loop, gain B
+  is stored as float and gain A is used at register precision.
+- ADSR (`src/dsp/Adsr.*`):
+  - Segments: attack → 1.0 (time pin 1), decay → Sustain (time pin 2, the sustain segment), and
+    release → 0 (time pin 4).
+  - Rate: `rate = 1/(2^((v*10*12000*0.1 - 8000)/1200) * fs)`. A segment lasts
+    `trunc((target - level)/rate)` samples (minimum 1). Output is level × Overall Level.
+
+## Midi to CV (in progress)
+
+- Note-on schedules the gate at `clock + 3` (`FUN_1006fa60(clock+3, 0x100a1c40)`), which is the
+  3-sample gate delay seen in the trace. Pitch and velocity change at the event's own sample.
+- Pitch: `(note - 69) * (float)(1/120) + 0.5`, i.e. 1 V/octave with 5 V = A440.
+- Velocity: `vel * (float)(1/127)`, sent to an output smoother at `+0x2c0` over
+  `N = trunc((|new - old| + 1) * 60)` samples (when `+0xb6` is set; otherwise a step).
+- Output smoother (`FUN_100636a0` / `FUN_10063440` / `FUN_10063510`): a smoothstep
+  `3t^2 - 2t^3` from the current value to the target over N samples, by forward differencing:
+  - Setup: `c = 1/N^3`, `val = cur + (3N - 2) c Δ`, `d1 = 6(N - 2) c Δ + (3N - 2) c Δ`,
+    `d2 = -12 c Δ + 6(N - 2) c Δ`, `d3 = -12 c Δ`.
+  - Each sample (float arithmetic): output `val`, then `val += d1; d1 += d2; d2 += d3`.
+  - At the end: snap to the target and report the output static.
+- Portamento is event 12 (`FUN_100a1b60`): slope `(target - current)/(fs * pow(...time...))`.
+
 ## Still to do (oscillator)
 - Sync wrapper `FUN_100ae720` (the voice oscillator's Sync input is the MIDI gate), the band
   cross-fade `0x100acc80`, and the pulse/PW variants (not used by MeowSynth).
