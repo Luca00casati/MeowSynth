@@ -88,9 +88,10 @@ def dump_container(g, c, depth, out):
             out.append(f'{ind}    {g.endpoint(ln["from"])}  ->  {g.endpoint(ln["to"])}')
     pm = c.get('patch_manager')
     if pm and pm['mems']:
-        out.append(f'{ind}  -- patch memory (presets: {["(0)"] + [n for _, n in pm["names"]]})')
+        names = [n for _, n in pm['names']]
+        out.append(f'{ind}  -- patch memory (presets: {names + ["Patch 6"]})')
         for mem in pm['mems']:
-            v = mem['values'][:1 + len(pm['names'])]
+            v = mem['values'][:1 + len(names)]
             v = [round(x, 5) if isinstance(x, float) else x for x in v]
             out.append(f'{ind}    {mem["name"]!r:28} {mem["kind"]:6} -> {g.endpoint(mem["plug"]) if mem["plug"] else "-"}  {v}')
     for m in mods:

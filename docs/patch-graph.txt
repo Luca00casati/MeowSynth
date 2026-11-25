@@ -68,7 +68,7 @@ about: 'MEOWSynth v.1.0\r\n\r\nhttp://knobster.org/projects/meowsynth/'
       #754 Container "Chorus".Output  ->  #282 IO Mod.Signal Out
       #1137 Container "Waveform".Choice  ->  #459 Midi to CV.Mono Mode
       #1174 Container "Waveform".Choice  ->  #459 Midi to CV.Bend Range
-    -- patch memory (presets: ['(0)', 'Clear cat', 'Old cat', 'March cat', 'Catband', 'Gospel cats'])
+    -- patch memory (presets: ['Clear cat', 'Old cat', 'March cat', 'Catband', 'Gospel cats', 'Patch 6'])
       'Phase'                      float  -> #892 PatchMemFloatIn "Patch Mem - Float".Value  [0.32543, 0.0, 0.0, 0.0, 0.0, 0.0]
       'Waveform'                   enum   -> #595 PatchMemListIn2 "Waveform".Value  [7, 0, 0, 9, 9, 0]
       'Min'                        float  -> #1097 PatchMemFloatIn "Patch Mem - Float".Value  [1.15, 0.0, 0.0, 0.0, 0.0, 0.0]

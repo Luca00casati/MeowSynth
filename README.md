@@ -32,10 +32,25 @@ python3 tools/se1_parse.py extracted/MeowSynth.se1 --json extracted/patch.json
 The interface images and the embedded add-on modules are not in the repository; extract them from
 your own copy of the plugin. `tools/ghidra/` has the Ghidra scripts used to find the class layouts.
 
+## Reference audio
+
+`tests/fixtures/*.f32` are renders of the original plugin (interleaved stereo float32, 44.1 kHz) for
+the scenarios in `tests/helpers/RenderScenario.h`. Each scenario isolates part of the signal chain
+with the plugin's own parameters (filter dry, chorus dry, no noise, ...). The original is fully
+deterministic, so the recreation can be compared sample by sample. To re-record (needs 32-bit Wine):
+
+```sh
+i686-w64-mingw32-g++ -O2 -static -I tests/helpers tools/render_reference.cpp -o render_reference.exe
+wine render_reference.exe MeowSynth.dll tests/fixtures
+i686-w64-mingw32-g++ -O2 -static -I tests/helpers tools/probe_plugin.cpp -o probe_plugin.exe
+wine probe_plugin.exe MeowSynth.dll    # parameters, programs, I/O
+```
+
 ## Roadmap
 - [x] Decode and fully parse the embedded SynthEdit project.
 - [ ] Reverse engineer the DSP of each module the patch uses.
-- [ ] Reference renders from the original plugin (under Wine) and audio tests.
+- [x] Reference renders from the original plugin (under Wine).
+- [ ] Audio tests against the references.
 - [ ] Synth engine on DamSDK, 32 and 64-bit builds.
 - [ ] Interface (panel, knobs, cat animation) from the original skin.
 
