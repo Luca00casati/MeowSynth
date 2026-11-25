@@ -12,6 +12,7 @@
 #include "dsp/Adsr.h"
 #include "dsp/MidiToCv.h"
 #include "dsp/Oscillator.h"
+#include "dsp/Slider.h"
 #include "RenderScenario.h"
 #include <limits>
 #include <string>
@@ -258,6 +259,25 @@ static void checkOscillators(const Trace& t) {
     }
 }
 
+// Dry/Wet slider in the voice scenario: preset 0 sets it to 1.0, then the scenario to 0.0,
+// both before the first block.
+static void checkDryWetSlider(const Trace& t) {
+    for (auto* in : t.find("ug_slider")) {
+        auto ref = t.samples(*in, 6);
+        if (ref.empty() || ref[0] == ref[1]) continue;  // the one that glides
+        Slider sl(-5.0f, 5.0f);
+        sl.setNormalized(1.0f);
+        sl.setNormalized(0.0f);
+        std::vector<float> out(ref.size());
+        for (size_t b = 0; b * t.block < out.size(); b++) sl.process(&out[b * t.block], t.block);
+        Result r;
+        for (size_t i = 0; i < out.size(); i++) compare(r, (long)i, out[i], ref[i]);
+        char name[64];
+        std::snprintf(name, sizeof(name), "slider #%d", in->n);
+        report(name, r);
+    }
+}
+
 int main(int argc, char** argv) {
     if (argc < 2) { std::fprintf(stderr, "usage: %s trace [scenario [bendRange]]\n", argv[0]); return 1; }
     Trace t;
@@ -267,6 +287,7 @@ int main(int argc, char** argv) {
     checkCrossFade(t);
     checkAdsr(t);
     checkOscillators(t);
+    checkDryWetSlider(t);
     if (argc > 2) checkMidiToCv(t, argv[2], argc > 3 ? atoi(argv[3]) : 12);
     return 0;
 }
