@@ -14,6 +14,7 @@
 #include "dsp/Oscillator.h"
 #include "dsp/Slider.h"
 #include "dsp/PeakFollower.h"
+#include "dsp/Delay.h"
 #include "RenderScenario.h"
 #include <limits>
 #include <string>
@@ -299,6 +300,23 @@ static void checkPeakFollower(const Trace& t) {
     }
 }
 
+// Delay2 (chorus): 60 ms, interpolating, modulation streaming, feedback 0.
+static void checkDelay(const Trace& t) {
+    for (auto* in : t.find("ug_delay2")) {
+        auto x = t.samples(*in, 0), mod = t.samples(*in, 1), ref = t.samples(*in, 2);
+        Delay2 d;
+        d.setup(44100.0f, 0.06f);
+        std::vector<float> out(ref.size());
+        for (size_t b = 0; b * t.block < out.size(); b++)
+            d.process(&x[b * t.block], &mod[b * t.block], &out[b * t.block], t.block);
+        Result r;
+        for (size_t i = 0; i < out.size(); i++) compare(r, (long)i, out[i], ref[i]);
+        char name[64];
+        std::snprintf(name, sizeof(name), "delay2 #%d", in->n);
+        report(name, r);
+    }
+}
+
 int main(int argc, char** argv) {
     if (argc < 2) { std::fprintf(stderr, "usage: %s trace [scenario [bendRange]]\n", argv[0]); return 1; }
     Trace t;
@@ -310,6 +328,7 @@ int main(int argc, char** argv) {
     checkOscillators(t);
     checkDryWetSlider(t);
     checkPeakFollower(t);
+    checkDelay(t);
     if (argc > 2) checkMidiToCv(t, argv[2], argc > 3 ? atoi(argv[3]) : 12);
     return 0;
 }
