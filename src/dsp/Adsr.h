@@ -13,6 +13,8 @@
 // that: callers report input state changes with setInput() at the sample they happen, then
 // call process() for the samples in between.
 
+#include <vector>
+
 namespace meow {
 
     class Adsr {
@@ -32,6 +34,11 @@ namespace meow {
         void process(const float* const* buffers, float* out, int offset, int count);
 
         float level() const { return current; }
+
+        // Output state changes reported at segment starts (block-relative sample, as given to
+        // setInput()/process()); cleared by the caller.
+        struct StateChange { int time; bool streaming; float value; };
+        std::vector<StateChange> changes;
 
     private:
         // ug_envelope_base, member names after their offsets in the original.

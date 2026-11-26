@@ -24,8 +24,12 @@ namespace meow {
         int counter = -1;
         bool done = true;
 
-        void set(float newTarget, int length);  // FUN_100636a0
-        void process(float* out, int count);    // FUN_100635f0 / FUN_10063510
+        // FUN_100636a0. Returns true if the output starts streaming (a glide of more than one
+        // sample); a one-sample step reports only its completion.
+        bool set(float newTarget, int length);
+        // FUN_100635f0 / FUN_10063510. Returns the index of the sample where the output reached
+        // its target and became static (the original reports a static state change there), or -1.
+        int process(float* out, int count);
     };
 
     class MidiToCv {
@@ -47,6 +51,12 @@ namespace meow {
 
         // Renders count samples into out[output][offset...].
         void process(float* const* out, int offset, int count);
+
+        // Output state changes (static/streaming, as SynthEdit reports them), with sample times
+        // relative to the start of the current block; cleared by the caller.
+        struct StateChange { int output; int time; bool streaming; float value; };
+        std::vector<StateChange> changes;
+        int blockStart = 0;  // absolute clock of the current block (set by the caller)
 
     private:
         struct Event { long time; int type; float a, b; };

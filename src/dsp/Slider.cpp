@@ -16,7 +16,7 @@ namespace meow {
             int fs = (int)sampleRate;
             length = (fs + ((fs >> 31) & 0x1f)) >> 5;  // fs / 32, rounded toward zero
         }
-        smoother.set(v, length);
+        streamingStart = smoother.set(v, length);
         return true;
     }
 

@@ -1,0 +1,44 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+// Copyright (C) 2026 Luca Casati
+#pragma once
+// The MeowSynth patch, wired like the original SynthEdit graph (docs/patch-graph.txt).
+//
+// SynthEdit processes in blocks of up to 128 samples. Each connection carries a buffer and the
+// static/streaming state changes of its source, at exact sample positions; modules react to
+// those (path selection, segment restarts, call splits) like the original. This engine mirrors
+// that per block: sliders and the shared LFO / chorus modulation first, then each voice in
+// data-flow order, then the sum of the voices.
+#include <cstdint>
+#include <memory>
+#include <vector>
+
+namespace meow {
+
+    class MeowEngine {
+    public:
+        enum Param {
+            kAttack = 0, kChorus, kCutoff, kDecay, kDepth, kDryWet, kE, kEnvMod, kFilterType, kGain, kM,
+            kMin, kNoise, kO, kText1, kText2, kPhase, kPortamento, kQ, kRate, kVibratoAmount,
+            kVibratoAttack, kW, kDivision, kWaveform2, kBendRange, kMonoMode, kNumParams
+        };
+
+        MeowEngine();
+        ~MeowEngine();
+
+        void setSampleRate(float fs);
+        void setTempo(double bpm);
+        void setProgram(int program);           // 0..5
+        void setParameter(int index, float value);  // normalized, takes effect at the next block
+        float getParameter(int index) const;
+
+        // MIDI at a sample offset within the next process() call.
+        void midi(int offset, unsigned char status, unsigned char data1, unsigned char data2);
+
+        void process(float* left, float* right, int count);
+
+    private:
+        struct Impl;
+        std::unique_ptr<Impl> impl;
+    };
+
+}

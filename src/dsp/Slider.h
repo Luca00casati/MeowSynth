@@ -19,7 +19,18 @@ namespace meow {
         // Normalized parameter value (0x100bccf0). Returns false if the target did not change.
         bool setNormalized(float p);
 
-        void process(float* out, int count) { smoother.process(out, count); }
+        // At open: the normalized value, applied as a step (no glide). Until the output is first
+        // processed its current value stays 0, so a change before that glides from 0.
+        void setInitialNormalized(float p) {
+            value = (float)((((double)max - min) * p + min) * 0.10000000149011612);
+            smoother.set(value, 0);
+        }
+        bool isGliding() const { return streamingStart; }
+
+        // Returns true if the output starts streaming.
+        bool setNormalizedStreaming(float p) { streamingStart = false; setNormalized(p); return streamingStart; }
+
+        int process(float* out, int count) { return smoother.process(out, count); }
         float target() const { return value; }
 
     private:
@@ -27,6 +38,7 @@ namespace meow {
         int type;
         float sampleRate = 44100.0f;
         float value = 0.0f;  // +0x98
+        bool streamingStart = false;
         Smoother smoother;
     };
 

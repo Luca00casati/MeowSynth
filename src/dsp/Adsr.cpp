@@ -39,15 +39,18 @@ namespace meow {
         if (rate == 0.0f) {  // no duration: hold
             if (streaming[kOverallLevel] && segment == kSustainSegment) {
                 mode = kHoldLevelStream;
+                changes.push_back({ offset, true, 0.0f });
             } else {
                 overall = inputValue(kOverallLevel, buffers, offset);
                 current = target;
                 mode = kHold;
-                holdSamples = 128;  // TODO: DAT_10199a68
+                holdSamples = 128;  // DAT_10199a68 = block size
+                changes.push_back({ offset, false, overall * current });
             }
             return;
         }
 
+        changes.push_back({ offset, true, 0.0f });
         const int timePin = kTimePin[segment < kSegmentCount ? segment : kSegmentCount];
         bool computeLength = true;
         if (streaming[kOverallLevel] || streaming[timePin]) {

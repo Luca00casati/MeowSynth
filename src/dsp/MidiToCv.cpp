@@ -9,9 +9,9 @@ namespace meow {
 
     // ---- Smoother ------------------------------------------------------------------------
 
-    void Smoother::set(float newTarget, int length) {  // FUN_100636a0
+    bool Smoother::set(float newTarget, int length) {  // FUN_100636a0
         if (newTarget == target && done)
-            return;
+            return false;
         Mode m = mode;
         done = false;
         if (length < 1) m = kStep;
@@ -29,7 +29,7 @@ namespace meow {
             value = (float)(a + current);
             d1 = (float)(b + a);
             d2 = (float)(k + b);
-            return;
+            return length > 1;
         }
         // step / linear
         value = current;
@@ -39,13 +39,14 @@ namespace meow {
         counter = length - 1;
         target = newTarget;
         value = (float)((double)d1 + value);
+        return length > 1;
     }
 
-    void Smoother::process(float* out, int count) {  // FUN_100635f0 + FUN_10063510
+    int Smoother::process(float* out, int count) {  // FUN_100635f0 + FUN_10063510
         if (done) {
             // The original writes the constant for one more block, then sleeps; the buffer keeps it.
             for (int i = 0; i < count; i++) out[i] = current;
-            return;
+            return -1;
         }
         for (int i = 0; i < count; i++) {
             out[i] = value;
@@ -53,13 +54,14 @@ namespace meow {
                 value = current = target;
                 for (int k = i; k < count; k++) out[k] = target;
                 done = true;
-                return;
+                return i;
             }
             value = (float)((double)value + d1);
             d1 = (float)((double)d2 + d1);
             d2 = (float)((double)d3 + d2);
         }
         current = value;
+        return -1;
     }
 
     // ---- MidiToCv ------------------------------------------------------------------------
@@ -162,7 +164,8 @@ namespace meow {
             gate.set(0.0f, gate.defaultLength);
         float v = (float)vel * 0.007874015718698502f;
         int n = mono ? (int)((std::fabs((double)v - velocity.current) + 1.0) * 60.0) : 0;
-        velocity.set(v, n);
+        if (velocity.set(v, n))
+            changes.push_back({ kVelocity, (int)(clock - blockStart), true, v });
         gateLevel = 1.0f;
         events.push_back(Event{ clock + 3, kEvGateOn, 0, 0 });
     }
@@ -172,11 +175,16 @@ namespace meow {
         portCur = from;
         double t = std::pow(2.0, (((double)portamentoTime * 10.0f - 2.0f) * 12000.0f * 0.1f - 8000.0f) * 0.0008333333333333334);
         portSlope = (float)(((double)portTarget - portCur) / ((double)sampleRate * t));
+        bool streaming = !(portSlope == 0.0f && bendSlope == 0.0f);
+        changes.push_back({ kPitch, (int)(clock - blockStart), streaming, (float)((double)bendCur + portCur) });
     }
 
     void MidiToCv::voiceBend(float value) {  // 0x100a1ef0
         bendTarget = (float)((double)bendRange * value * 0.008333333333333333);
+        bool wasStatic = bendSlope == 0.0f && portSlope == 0.0f;
         bendSlope = (float)(((double)bendTarget - bendCur) / ((double)sampleRate * 0.01666666753590107f));
+        if (wasStatic && bendSlope != 0.0f)
+            changes.push_back({ kPitch, (int)(clock - blockStart), true, 0.0f });
     }
 
     void MidiToCv::advanceMaster(int count) {  // top of 0x100a1750
@@ -219,12 +227,17 @@ namespace meow {
                     *pitch++ = (float)(p + b);
                 }
                 remaining -= m;
+                bool wasMoving = portSlope != 0.0f || bendSlope != 0.0f;
                 if (portDone) { portCur = portTarget; portSlope = 0.0f; }
                 if (bendDone) { bendCur = bendTarget; bendSlope = 0.0f; }
+                if (wasMoving && portSlope == 0.0f && bendSlope == 0.0f)
+                    changes.push_back({ kPitch, offset + (count - remaining), false, (float)((double)portCur + bendCur) });
             }
         }
-        gate.process(out[kGate] + offset, count);
-        velocity.process(out[kVelocity] + offset, count);
+        int d = gate.process(out[kGate] + offset, count);
+        if (d >= 0) changes.push_back({ kGate, offset + d, false, gate.target });
+        d = velocity.process(out[kVelocity] + offset, count);
+        if (d >= 0) changes.push_back({ kVelocity, offset + d, false, velocity.target });
         aftertouch.process(out[kAftertouch] + offset, count);
     }
 
