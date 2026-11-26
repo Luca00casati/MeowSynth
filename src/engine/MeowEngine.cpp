@@ -21,7 +21,9 @@ namespace meow {
 
     namespace {
 
-        const int kBlock = 128;  // SynthEdit's internal block size
+        const int kBlock = 128;  // SynthEdit's internal block size (the most per block)
+        int gLen = kBlock;       // length of the block being processed: host calls are split into
+                                 // blocks of up to 128 samples, starting at each call
         const int kVoices = 6;
 
         // ---- connections -----------------------------------------------------------------
@@ -73,7 +75,7 @@ namespace meow {
                 if (e.time > t) { run(t, e.time); t = e.time; }
                 onEvent(e);
             }
-            if (t < kBlock) run(t, kBlock);
+            if (t < gLen) run(t, gLen);
         }
 
         // Tracks the state of an input while replaying its events.
@@ -103,7 +105,7 @@ namespace meow {
                     if (slider.setNormalized(p.second) && slider.isGliding()) out.report(t, true, 0.0f);
                 }
                 pending.clear();
-                run(t, kBlock);
+                run(t, gLen);
             }
             void run(int from, int to) {
                 int d = slider.process(out.buf + from, to - from);
@@ -127,7 +129,7 @@ namespace meow {
                 cv.blockStart = (int)clock;
                 cv.changes.clear();
                 float* outs[4] = { gate.buf, pitch.buf, velocity.buf, aftertouch.buf };
-                cv.process(outs, 0, kBlock);
+                cv.process(outs, 0, gLen);
                 Port* ports[4] = { &gate, &pitch, &velocity, &aftertouch };
                 std::stable_sort(cv.changes.begin(), cv.changes.end(),
                                  [](const MidiToCv::StateChange& a, const MidiToCv::StateChange& b) { return a.time < b.time; });
@@ -276,7 +278,7 @@ namespace meow {
             Port out;
             void block() {
                 out.begin();
-                for (int i = 0; i < kBlock; i++) {
+                for (int i = 0; i < gLen; i++) {
                     float s = 0.0f;
                     for (auto* p : in) s += p->buf[i];
                     out.buf[i] = s;
@@ -300,7 +302,7 @@ namespace meow {
             Port out;
             void block() {
                 out.begin();
-                for (int i = 0; i < kBlock; i++) out.buf[i] = a->buf[i] * b->buf[i];
+                for (int i = 0; i < gLen; i++) out.buf[i] = a->buf[i] * b->buf[i];
                 InputState sa, sb;
                 sa.start(a);
                 sb.start(b);
@@ -651,7 +653,7 @@ namespace meow {
             masterCv.setPortamentoTime(sliders[sPortamento]->out.buf[0]);
             for (auto& m : midiQueue) masterCv.midi(m.offset, m.s, m.d1, m.d2);
             masterCv.commands.clear();
-            masterCv.process(outs, 0, kBlock);
+            masterCv.process(outs, 0, gLen);
             for (auto& c : masterCv.commands) {
                 if (c.type == MidiToCv::VoiceCommand::kNoteOn) {
                     int i = allocate(c.channel, c.note, c.time);
@@ -752,12 +754,12 @@ namespace meow {
             chorusDepth1.block(); chorusDepth2.block();
             chorusMod1.block(); chorusMod2.block();
 
-            std::fill(l, l + kBlock, 0.0f);
-            std::fill(r, r + kBlock, 0.0f);
+            std::fill(l, l + gLen, 0.0f);
+            std::fill(r, r + gLen, 0.0f);
             for (int i = 0; i < kVoices; i++) {
                 Voice& v = voices[i];
                 if (!suspended[i]) runVoice(v);
-                for (int k = 0; k < kBlock; k++) { l[k] += v.chorusL.out.buf[k]; r[k] += v.chorusR.out.buf[k]; }
+                for (int k = 0; k < gLen; k++) { l[k] += v.chorusL.out.buf[k]; r[k] += v.chorusR.out.buf[k]; }
                 // A voice whose outputs have gone static is suspended two blocks later (it then
                 // stops processing, so its noise oscillator stops drawing from the generator).
                 if (!suspended[i]) {
@@ -767,7 +769,7 @@ namespace meow {
                     else if (--suspendCountdown[i] == 0) suspended[i] = true;
                 }
             }
-            clock += kBlock;
+            clock += gLen;
         }
     };
 
@@ -789,18 +791,18 @@ namespace meow {
 
     void MeowEngine::process(float* left, float* right, int count) {
         if (!impl->started) impl->open();
-        // MIDI offsets are relative to this call; hand each internal 128-sample block its share.
+        // MIDI offsets are relative to this call; hand each internal block its share.
         std::vector<Impl::PendingMidi> all = std::move(impl->midiQueue);
         impl->midiQueue.clear();
         for (int pos = 0; pos < count; pos += kBlock) {
+            gLen = std::min(kBlock, count - pos);
             for (auto& m : all)
-                if (m.offset >= pos && m.offset < pos + kBlock)
+                if (m.offset >= pos && m.offset < pos + gLen)
                     impl->midiQueue.push_back({ m.offset - pos, m.s, m.d1, m.d2 });
             float l[kBlock], r[kBlock];
             impl->block(l, r);
-            int n = std::min(kBlock, count - pos);
-            std::memcpy(left + pos, l, sizeof(float) * n);
-            std::memcpy(right + pos, r, sizeof(float) * n);
+            std::memcpy(left + pos, l, sizeof(float) * gLen);
+            std::memcpy(right + pos, r, sizeof(float) * gLen);
         }
     }
 }

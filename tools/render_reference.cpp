@@ -10,6 +10,7 @@
 // Each scenario loads a fresh plugin instance, so they do not influence each other.
 #include <windows.h>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <string>
 #include "RenderScenario.h"
@@ -25,7 +26,7 @@ static void useWindowsFpuDefaults() { unsigned short cw = 0x27f; __asm__ volatil
 int main(int argc, char** argv) {
     useWindowsFpuDefaults();
     if (argc < 3) {
-        std::fprintf(stderr, "usage: %s <plugin.dll> <outdir> [scenario]\n", argv[0]);
+        std::fprintf(stderr, "usage: %s <plugin.dll> <outdir> [scenario|all] [hostBlockSize]\n", argv[0]);
         return 1;
     }
     HMODULE dll = LoadLibraryA(argv[1]);
@@ -42,14 +43,14 @@ int main(int argc, char** argv) {
     }
     for (int s = 0; s < kNumScenarios; s++) {
         const Scenario& sc = kScenarios[s];
-        if (argc > 3 && std::strcmp(argv[3], sc.name) != 0)
+        if (argc > 3 && std::strcmp(argv[3], "all") != 0 && std::strcmp(argv[3], sc.name) != 0)
             continue;
         Plugin* plugin = entry(&hostCallback);
         if (!plugin) {
             std::fprintf(stderr, "plugin refused to load\n");
             return 1;
         }
-        std::vector<float> samples = render(plugin, sc);
+        std::vector<float> samples = render(plugin, sc, argc > 4 ? std::atoi(argv[4]) : kBlockSize);
         std::string path = std::string(argv[2]) + "/" + sc.name + ".f32";
         FILE* f = std::fopen(path.c_str(), "wb");
         if (!f)

@@ -4,11 +4,13 @@
 // them with the original's renders in tests/fixtures.
 //   g++ -O2 -std=c++17 -frounding-math -ffp-contract=off -I src -I tests/helpers \
 //       tests/engine/render_scenarios.cpp src/dsp/*.cpp src/engine/*.cpp -o render_scenarios
-//   ./render_scenarios tests/fixtures [scenario]
+//   ./render_scenarios tests/fixtures [scenario|all] [hostBlockSize]
 #include "RenderScenario.h"
 #include "engine/MeowEngine.h"
 #include "dsp/Oscillator.h"
+#include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -21,7 +23,8 @@ int main(int argc, char** argv) {
     int failures = 0;
     for (int s = 0; s < kNumScenarios; s++) {
         const Scenario& sc = kScenarios[s];
-        if (argc > 2 && std::strcmp(argv[2], sc.name)) continue;
+        if (argc > 2 && std::strcmp(argv[2], "all") && std::strcmp(argv[2], sc.name)) continue;
+        const int hostBlock = argc > 3 ? std::atoi(argv[3]) : kBlockSize;
         // The noise generator is shared by the whole DLL; each reference was rendered in a
         // fresh process, so start every scenario from the initial seed.
         meow::Oscillator::noiseSeed = 0;
@@ -30,15 +33,20 @@ int main(int argc, char** argv) {
         e.setTempo(kTempo);
         e.setProgram(sc.program);
         std::vector<float> out;
-        std::vector<float> l(kBlockSize), r(kBlockSize);
-        for (int b = 0; b < sc.blocks; b++) {
-            for (int p = 0; p < sc.numParams; p++)
-                if (sc.params[p].block == b) e.setParameter(sc.params[p].index, sc.params[p].value);
-            for (int m = 0; m < sc.numMidi; m++)
-                if (sc.midi[m].block == b)
-                    e.midi(sc.midi[m].offset, sc.midi[m].status, sc.midi[m].data1, sc.midi[m].data2);
-            e.process(l.data(), r.data(), kBlockSize);
-            for (int i = 0; i < kBlockSize; i++) { out.push_back(l[i]); out.push_back(r[i]); }
+        std::vector<float> l(hostBlock), r(hostBlock);
+        const long total = (long)sc.blocks * kBlockSize;
+        for (long pos = 0; pos < total; pos += hostBlock) {
+            const int n = (int)std::min<long>(hostBlock, total - pos);
+            for (int p = 0; p < sc.numParams; p++) {
+                long t = (long)sc.params[p].block * kBlockSize;
+                if (t >= pos && t < pos + n) e.setParameter(sc.params[p].index, sc.params[p].value);
+            }
+            for (int m = 0; m < sc.numMidi; m++) {
+                long t = (long)sc.midi[m].block * kBlockSize + sc.midi[m].offset;
+                if (t >= pos && t < pos + n) e.midi((int)(t - pos), sc.midi[m].status, sc.midi[m].data1, sc.midi[m].data2);
+            }
+            e.process(l.data(), r.data(), n);
+            for (int i = 0; i < n; i++) { out.push_back(l[i]); out.push_back(r[i]); }
         }
         std::string path = std::string(dir) + "/" + sc.name + ".f32";
         FILE* f = std::fopen(path.c_str(), "rb");
@@ -58,7 +66,7 @@ int main(int argc, char** argv) {
                     mism ? "DIFF" : "EXACT", mism, out.size(), first, maxAbs);
         if (mism) {
             failures++;
-            if (first >= 0 && argc > 2)
+            if (first >= 0 && argc > 2 && std::strcmp(argv[2], "all"))
                 for (long i = first - 2; i < first + 4; i++)
                     std::printf("   frame %ld  L mine %.9g ref %.9g   R mine %.9g ref %.9g\n", i, out[2 * i], ref[2 * i],
                                 out[2 * i + 1], ref[2 * i + 1]);

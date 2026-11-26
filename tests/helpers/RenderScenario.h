@@ -10,6 +10,7 @@
 // Each scenario picks a program, sets some parameters and plays MIDI. Parameters
 // are used to isolate parts of the signal chain (e.g. filter dry, chorus dry, no
 // noise) so modules can be checked one at a time.
+#include <algorithm>
 #include <cstdint>
 #include <cstring>
 #include <vector>
@@ -206,36 +207,43 @@ namespace RenderScenario {
     };
     const int kNumScenarios = RS_COUNT(kScenarios);
 
-    // Opens the plugin, plays one scenario and returns interleaved stereo samples.
-    inline std::vector<float> render(Plugin* plugin, const Scenario& sc) {
+    // Opens the plugin, plays one scenario and returns interleaved stereo samples. The
+    // scenario's timing is in kBlockSize blocks; hostBlock picks the size of the process calls
+    // (parameters are set before the call that contains their block's start).
+    inline std::vector<float> render(Plugin* plugin, const Scenario& sc, int hostBlock = kBlockSize) {
         std::vector<float> out;
         resetTime();
         plugin->dispatcher(plugin, 0, 0, 0, 0, 0.0f);                     // effOpen
         plugin->dispatcher(plugin, 10, 0, 0, 0, (float)kSampleRate);      // effSetSampleRate
-        plugin->dispatcher(plugin, 11, 0, kBlockSize, 0, 0.0f);           // effSetBlockSize
+        plugin->dispatcher(plugin, 11, 0, hostBlock, 0, 0.0f);            // effSetBlockSize
         plugin->dispatcher(plugin, 2, 0, sc.program, 0, 0.0f);            // effSetProgram
         plugin->dispatcher(plugin, 12, 0, 1, 0, 0.0f);                    // effMainsChanged (on)
         plugin->dispatcher(plugin, 71, 0, 0, 0, 0.0f);                    // effStartProcess
 
-        std::vector<float> left(kBlockSize), right(kBlockSize);
+        std::vector<float> left(hostBlock), right(hostBlock);
         float* outputs[2] = { &left[0], &right[0] };
         MidiEvent midi[8];
+        const long total = (long)sc.blocks * kBlockSize;
 
-        for (int block = 0; block < sc.blocks; block++) {
-            for (int p = 0; p < sc.numParams; p++)
-                if (sc.params[p].block == block)
+        for (long pos = 0; pos < total; pos += hostBlock) {
+            const int n = (int)std::min<long>(hostBlock, total - pos);
+            for (int p = 0; p < sc.numParams; p++) {
+                long t = (long)sc.params[p].block * kBlockSize;
+                if (t >= pos && t < pos + n)
                     plugin->setParameter(plugin, sc.params[p].index, sc.params[p].value);
+            }
 
             Events events;
             std::memset(&events, 0, sizeof(events));
             for (int m = 0; m < sc.numMidi && events.numEvents < 8; m++) {
-                if (sc.midi[m].block != block)
+                long t = (long)sc.midi[m].block * kBlockSize + sc.midi[m].offset;
+                if (t < pos || t >= pos + n)
                     continue;
                 MidiEvent& e = midi[events.numEvents];
                 std::memset(&e, 0, sizeof(e));
                 e.type = 1;
                 e.byteSize = sizeof(MidiEvent);
-                e.deltaFrames = sc.midi[m].offset;
+                e.deltaFrames = (int32_t)(t - pos);
                 e.midiData[0] = (char)sc.midi[m].status;
                 e.midiData[1] = (char)sc.midi[m].data1;
                 e.midiData[2] = (char)sc.midi[m].data2;
@@ -246,9 +254,9 @@ namespace RenderScenario {
 
             std::fill(left.begin(), left.end(), 0.0f);
             std::fill(right.begin(), right.end(), 0.0f);
-            plugin->processReplacing(plugin, 0, outputs, kBlockSize);
-            advanceTime(kBlockSize);
-            for (int i = 0; i < kBlockSize; i++) {
+            plugin->processReplacing(plugin, 0, outputs, n);
+            advanceTime(n);
+            for (int i = 0; i < n; i++) {
                 out.push_back(left[i]);
                 out.push_back(right[i]);
             }
