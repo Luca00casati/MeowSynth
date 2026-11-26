@@ -75,7 +75,7 @@ namespace meow {
 
     void MidiToCv::midi(int time, unsigned char status, unsigned char d1, unsigned char d2) {
         int type = status & 0xf0;
-        Event e{ clock + time, -1, 0, 0 };
+        Event e{ clock + time, -1, 0, 0, {} };
         e.a = (float)status; e.b = (float)(d1 | (d2 << 8));
         e.type = 100 + type;  // raw MIDI, handled when reached
         events.push_back(e);
@@ -91,7 +91,8 @@ namespace meow {
         } else if (type == 0xe0) {
             int v = (d2 - 0x40) * 0x80 + d1;
             channelBend[channel] = (float)v * 0.0001220703125f;
-            voiceBend(channelBend[channel]);
+            if (master) commands.push_back({ VoiceCommand::kBend, clock, channel, 0, 0, 0, 0, channelBend[channel] });
+            else voiceBend(channelBend[channel]);
         }
     }
 
@@ -120,6 +121,10 @@ namespace meow {
             glideSlope = 0.0f;
         }
         currentNote = note;
+        if (master) {
+            commands.push_back({ VoiceCommand::kNoteOn, clock, channel, note, vel, glidePos, glideTarget, channelBend[channel] });
+            return;
+        }
         voiceNoteOn(channel, note, vel);
         voiceGlide(glidePos, glideTarget);
     }
@@ -148,12 +153,24 @@ namespace meow {
                 return;
             }
         }
-        (void)channel;
+        if (master) {
+            commands.push_back({ VoiceCommand::kNoteOff, clock, channel, note, 0, 0, 0, 0 });
+            return;
+        }
+        voiceNoteOff();
+    }
+
+    void MidiToCv::voiceNoteOff() {
         // Note off to the voice (0x100a20f0): gate low now, and the pending gate level becomes 0;
         // a gate-on scheduled by an earlier note-on will therefore fire with level 0.
         gateLevel = 0.0f;
         gate.set(0.0f, gate.defaultLength);
-        events.push_back(Event{ clock + 3, kEvGateOn, 0, 0 });
+        events.push_back(Event{ clock + 3, kEvGateOn, 0, 0, {} });
+    }
+
+    void MidiToCv::command(const VoiceCommand& c) {
+        Event e{ c.time, kEvCommand, 0, 0, c };
+        events.push_back(e);
     }
 
     void MidiToCv::voiceNoteOn(int channel, int note, int vel) {  // 0x100a1fd0
@@ -167,7 +184,7 @@ namespace meow {
         if (velocity.set(v, n))
             changes.push_back({ kVelocity, (int)(clock - blockStart), true, v });
         gateLevel = 1.0f;
-        events.push_back(Event{ clock + 3, kEvGateOn, 0, 0 });
+        events.push_back(Event{ clock + 3, kEvGateOn, 0, 0, {} });
     }
 
     void MidiToCv::voiceGlide(float from, float to) {  // 0x100a1b60
@@ -200,6 +217,7 @@ namespace meow {
 
     void MidiToCv::render(float* const* out, int offset, int count) {  // 0x100a1750
         advanceMaster(count);
+        if (master) return;  // a master has no outputs of its own
         float* pitch = out[kPitch] + offset;
         if (bendSlope == 0.0f && portSlope == 0.0f) {
             float v = bendCur + portCur;
@@ -263,6 +281,17 @@ namespace meow {
                         handleMidi((unsigned char)e.a, (unsigned char)(b & 0xff), (unsigned char)(b >> 8));
                     } else if (e.type == kEvGateOn) {
                         gate.set(gateLevel, gate.defaultLength);
+                    } else if (e.type == kEvCommand) {
+                        const VoiceCommand& c = e.cmd;
+                        if (c.type == VoiceCommand::kNoteOn) {
+                            channelBend[c.channel] = c.bend;
+                            voiceNoteOn(c.channel, c.note, c.velocity);
+                            voiceGlide(c.from, c.to);
+                        } else if (c.type == VoiceCommand::kNoteOff) {
+                            voiceNoteOff();
+                        } else {
+                            voiceBend(c.bend);
+                        }
                     }
                     i = 0;
                 } else {

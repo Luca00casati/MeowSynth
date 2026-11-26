@@ -335,8 +335,8 @@ suspension or reset). This does not affect the output, because those voices are 
 
 The engine runs the patch per 128-sample block, in data-flow order, with each connection's
 static/streaming state changes at exact samples. `tests/engine/render_scenarios.cpp` compares
-it with the reference renders; voice, legato, filter, vibrato, chorus and presets 0-2 are
-bit-exact (both channels, every sample).
+it with the reference renders; all eleven scenarios (voice, legato, filter, vibrato, chorus and
+the six presets, mono and polyphonic) are bit-exact, both channels, every sample.
 
 Findings while matching the original end to end:
 
@@ -356,3 +356,11 @@ Findings while matching the original end to end:
   buffer length, then reports a static output and sleeps.
 - Voice suspension: a voice whose outputs went static during block n still runs blocks n+1 and
   n+2, then is suspended (its noise oscillator then stops drawing from the shared generator).
+- Polyphony (Mono Mode off): one master Midi to CV keeps the note stack and the portamento glide
+  (a new note glides from the previous note's pitch even on another voice) and sends voice
+  commands. Allocation (FUN_1002f4e0): voice 0 while it has never played (its note field is 0);
+  otherwise, scanning voices from last to first, a voice already playing the same channel and note
+  is killed (release time = now), then the voice with the smallest release time wins (playing
+  voices hold INT_MAX), else the one with the oldest note-on; ties go to the highest index.
+  Note-on (FUN_1002e840) stores channel, note, note-on time and release time INT_MAX; note-off
+  (FUN_1002ea40 / FUN_1002df80) sets the release time.

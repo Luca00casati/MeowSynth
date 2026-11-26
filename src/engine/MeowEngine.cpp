@@ -505,6 +505,12 @@ namespace meow {
         AdderNode chorusOff1, chorusOff2, chorusMod1, chorusMod2;
         MulNode chorusDepth1, chorusDepth2;
         Voice voices[kVoices];
+        // Polyphony (presets with Mono Mode off): one master Midi to CV keeps the note stack
+        // and the portamento glide, and its voice commands go to the voice chosen by
+        // SynthEdit's allocator (FUN_1002f4e0).
+        MidiToCv masterCv;
+        struct VoiceSlot { int channel = 0, note = 0; int releaseTime = 0, onTime = 0; bool killed = false; };
+        VoiceSlot slots[kVoices];
         int suspendCountdown[kVoices];   // blocks until a quiet voice is suspended (-1: not quiet)
         bool suspended[kVoices] = {};
 
@@ -623,7 +629,54 @@ namespace meow {
             lfo.in[Oscillator::kPmDepth] = &pmDepth;
         }
 
+        int allocate(int channel, int note, long time) {  // FUN_1002f4e0
+            if (slots[0].note == 0) return 0;
+            int minRelease = 0x7fffffff, minOn = 0x7fffffff, byRelease = -1, byOn = 0;
+            for (int i = kVoices - 1; i >= 0; i--) {
+                VoiceSlot& v = slots[i];
+                if (v.channel == channel && v.note == note && !v.killed) {  // FUN_1002e030
+                    v.killed = true;
+                    v.releaseTime = (int)time;
+                    voices[i].midi.cv.command({ MidiToCv::VoiceCommand::kNoteOff, time, channel, note, 0, 0, 0, 0 });
+                }
+                if (v.onTime < minOn) { minOn = v.onTime; byOn = i; }
+                if (v.releaseTime < minRelease) { minRelease = v.releaseTime; byRelease = i; }
+            }
+            return byRelease >= 0 ? byRelease : byOn;
+        }
+
+        void polyMidi() {
+            float dummy[4][kBlock];
+            float* outs[4] = { dummy[0], dummy[1], dummy[2], dummy[3] };
+            masterCv.setPortamentoTime(sliders[sPortamento]->out.buf[0]);
+            for (auto& m : midiQueue) masterCv.midi(m.offset, m.s, m.d1, m.d2);
+            masterCv.commands.clear();
+            masterCv.process(outs, 0, kBlock);
+            for (auto& c : masterCv.commands) {
+                if (c.type == MidiToCv::VoiceCommand::kNoteOn) {
+                    int i = allocate(c.channel, c.note, c.time);
+                    VoiceSlot& v = slots[i];  // FUN_1002e840
+                    v.channel = c.channel; v.note = c.note; v.killed = false;
+                    v.onTime = (int)c.time; v.releaseTime = 0x7fffffff;
+                    voices[i].midi.cv.command(c);
+                    suspended[i] = false; suspendCountdown[i] = -1;
+                } else if (c.type == MidiToCv::VoiceCommand::kNoteOff) {  // FUN_1002ea40
+                    for (int i = 0; i < kVoices; i++) {
+                        VoiceSlot& v = slots[i];
+                        if (v.channel == c.channel && v.note == c.note && !v.killed && v.releaseTime == 0x7fffffff) {
+                            v.releaseTime = (int)c.time;
+                            voices[i].midi.cv.command(c);
+                            break;
+                        }
+                    }
+                } else {
+                    for (auto& v : voices) v.midi.cv.command(c);
+                }
+            }
+        }
+
         void runVoice(Voice& v) {
+            v.midi.cv.syncClock(clock);
             for (Port* p : { &v.k0, &v.k05, &v.k07, &v.k04, &v.k1 }) p->begin();
             v.midi.block(clock);
             v.noise.block();
@@ -659,7 +712,12 @@ namespace meow {
             for (auto& v : voices) {
                 v.midi.cv.setMonoMode(kPresetMono[program] != 0);
                 v.midi.cv.setBendRange(kPresetBend[program]);
+                v.midi.cv.setSampleRate(fs);
             }
+            masterCv.setMaster(true);
+            masterCv.setMonoMode(false);
+            masterCv.setBendRange(kPresetBend[program]);
+            masterCv.setSampleRate(fs);
             started = true;
         }
 
@@ -676,10 +734,13 @@ namespace meow {
             paramQueue.clear();
             // The sliders' MIDI CC assignments (mod wheel on Vibrato Amount, CC5 on Portamento) are
             // not active in the exported plugin: the original ignores those controllers.
-            // Mono mode: every note goes to the first voice. TODO: polyphonic voice allocation.
-            for (auto& m : midiQueue) {
-                voices[0].midi.pending.push_back({ m.offset, (unsigned)m.s | ((unsigned)m.d1 << 8) | ((unsigned)m.d2 << 16) });
-                if ((m.s & 0xf0) == 0x90 && m.d2 > 0) { suspended[0] = false; suspendCountdown[0] = -1; }
+            if (kPresetMono[program]) {  // mono: every note goes to the first voice
+                for (auto& m : midiQueue) {
+                    voices[0].midi.pending.push_back({ m.offset, (unsigned)m.s | ((unsigned)m.d1 << 8) | ((unsigned)m.d2 << 16) });
+                    if ((m.s & 0xf0) == 0x90 && m.d2 > 0) { suspended[0] = false; suspendCountdown[0] = -1; }
+                }
+            } else {
+                polyMidi();
             }
             midiQueue.clear();
 
