@@ -373,11 +373,22 @@ Findings while matching the original end to end:
   static output and the Midi to CV smoothers' constant fill last one block length. Verified
   bit-exact against the original at host blocks of 37, 100, 256, 333, 512, 513, 768, 1000 and
   1024 samples (`MeowEngine::blockSizeFor`).
-- Still open: at 640 (blocks of 80) and 191 the original suspends a voice that went quiet after a
-  release one block later than the engine (two blocks later otherwise, which every other case
-  confirms). Modules sleep individually in SynthEdit (static output written for one block length,
-  then unlinked at the next call, FUN_10070830 / FUN_10070800); the engine models the voice as
-  a whole. Only the shared noise sequence after such a release differs (vibrato, presets 3 and 4).
+- Module sleep (SynthEdit's ug_base, traced with `tools/trace_modules.cpp`, which also logs each
+  module's process function, countdown and sleep flag per call into `<out>.state`):
+  - A module whose output goes static keeps writing for one block length, counted down per
+    process call, then sleeps; its buffer keeps what was written last. The VCA's fill
+    (0x100c27b0) writes `signal[first sample of the call] * gain` over each call; the X-Mix's
+    (0x10077030) computes the mix as usual.
+  - The DH filter's zeros after a static audio input last one block length (the SEM's block size
+    query, which is also its silence limit); one block length after they began, it reports its
+    static output again (0x10002aa0). SynthEdit re-transmits static states (FUN_100dcdd0), so
+    the static X-Mix and VCA after it pass it on, cutting their process calls there.
+  - The Delay2 then doesn't count the rest of that block towards its sleep countdown (measured:
+    in the original its next call only starts at the next block).
+  - `ug_voice_monitor` (FUN_100c39d0) suspends a voice once its outputs have been static for more
+    than one block length and its note was released more than 30 samples ago.
+  With this, every scenario is bit-exact at host blocks of 37, 80, 100, 191, 250, 333, 512, 640,
+  997, 1000 and 2048 samples.
 - Pitch-bend range: the container holding it has "Ignore Program Change", so every program
   bends by the patch's stored range (index 11), not the per-program values in patch memory
   (scenario `bend3`: program 3, whose stored value is 0).

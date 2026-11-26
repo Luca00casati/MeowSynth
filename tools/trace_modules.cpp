@@ -104,6 +104,7 @@ int main(int argc, char** argv) {
     float* outputs[2] = { left.data(), right.data() };
     std::vector<Instance> inst;
     FILE* f = std::fopen(argv[5], "wb");
+    FILE* stateFile = std::fopen((std::string(argv[5]) + ".state").c_str(), "w");
     std::vector<float> mix;
     const int total = sc->blocks * kBlockSize;
     MidiEvent midi[8];
@@ -150,6 +151,14 @@ int main(int argc, char** argv) {
                 }
             }
         }
+        // Module states after the call: process function (+0x68), fill countdown (+0x80) and
+        // asleep flag (+0x24), into <out>.state (one line per call).
+        if (stateFile) {
+            std::fprintf(stateFile, "%d", pos);
+            for (auto& in : inst)
+                std::fprintf(stateFile, " %08x:%d:%d", rd(in.addr + 0x68), (int)rd(in.addr + 0x80), (int)(rd(in.addr + 0x24) & 0xff));
+            std::fprintf(stateFile, "\n");
+        }
         // Record every plug buffer's first B samples. With B = 128 (SynthEdit's internal
         // block) each host block is exactly one internal block, so this is that block's data.
         for (auto& in : inst)
@@ -162,6 +171,7 @@ int main(int argc, char** argv) {
             }
     }
     std::fclose(f);
+    if (stateFile) std::fclose(stateFile);
     std::string mixPath = std::string(argv[5]) + ".mix.f32";
     FILE* m = std::fopen(mixPath.c_str(), "wb");
     std::fwrite(mix.data(), 4, mix.size(), m);

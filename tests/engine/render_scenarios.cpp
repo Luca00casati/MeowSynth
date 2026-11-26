@@ -51,6 +51,13 @@ int main(int argc, char** argv) {
             e.process(l.data(), r.data(), n);
             for (int i = 0; i < n; i++) { out.push_back(l[i]); out.push_back(r[i]); }
         }
+        if (const char* keep = std::getenv("MEOW_RENDER_OUT")) {  // keep the engine's renders
+            std::string out_path = std::string(keep) + "/" + sc.name + ".f32";
+            if (FILE* o = std::fopen(out_path.c_str(), "wb")) {
+                std::fwrite(out.data(), sizeof(float), out.size(), o);
+                std::fclose(o);
+            }
+        }
         std::string path = std::string(dir) + "/" + sc.name + ".f32";
         FILE* f = std::fopen(path.c_str(), "rb");
         std::vector<float> ref(out.size());

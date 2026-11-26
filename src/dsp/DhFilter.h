@@ -20,6 +20,12 @@ namespace meow {
         void setGainCompensation(bool on) { gainComp = on; }
         void setStages(int n) { stages = n < 1 ? 1 : (n > 8 ? 8 : n); }
         void setInputMode(InputMode m) { mode = m; }
+        // The SEM asks the host for its block length (vtable +0x28): it is both how long the
+        // module writes zeros once its audio input is static and its silence limit.
+        void setBlockSize(int n) { blockSize = n; }
+        // True once, when the zeros after a static audio input are done (the SEM then reports
+        // its static output again, 0x10002aa0).
+        bool takeZeroingDone() { bool d = zeroingDone; zeroingDone = false; return d; }
 
         // An input pin changed state (static <-> streaming, or a new static value): 0x10002640.
         // The original then starts a new process call, so call process() separately for the
@@ -52,6 +58,8 @@ namespace meow {
         bool zeroing = false;                 // process function 0x10002aa0
         bool suspended = false;               // after zeroing: not processed any more
         int zeroCountdown = 0;                // +0x1dc
+        int blockSize = 1024;                 // +0x40
+        bool zeroingDone = false;
     };
 
 }

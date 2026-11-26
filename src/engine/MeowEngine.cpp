@@ -30,7 +30,9 @@ namespace meow {
 
         // ---- connections -----------------------------------------------------------------
 
-        struct Event { int time; bool streaming; float value; };
+        // renotify: a static state sent again (SynthEdit re-transmits static states, FUN_100dcdd0);
+        // it changes nothing but cuts the receivers' process calls.
+        struct Event { int time; bool streaming; float value; bool renotify = false; };
 
         // A connection: one block of samples plus the source's state changes during the block.
         struct Port {
@@ -48,7 +50,10 @@ namespace meow {
                 if (s == streaming && (s || v == value)) return;
                 streaming = s;
                 value = v;
-                events.push_back({ t, s, v });
+                events.push_back({ t, s, v, false });
+            }
+            void renotify(int t) {
+                if (!streaming) events.push_back({ t, false, value, true });
             }
             void setConstant(float v) {
                 std::fill(buf, buf + kBlock, v);
@@ -171,19 +176,23 @@ namespace meow {
             Port out;
             InputState volState, sigState;
             bool opened = false;
-            float gain = 0.0f, constant = 0.0f;
-            bool asleep = false;
+            float gain = 0.0f;
+            bool filling = false;   // static output: process 0x100c27b0
+            int fillLeft = 0;       // +0x80: samples left to write before the module sleeps
+            int* blockLen = nullptr;
 
             // Output state (0x100c2b00): static when Volume is static and either the gain is 0 or
-            // the signal is static too; then a constant is written once and the module sleeps.
+            // the signal is static too. Then (0x100c27b0) each process call writes
+            // signal[first sample of the call] * gain over the call, for one block length in
+            // all; after that the module sleeps and its buffer keeps what was written last.
             void change(int t) {
-                asleep = false;
+                filling = false;
                 if (!volState.streaming) {
                     gain = vca.staticGain(volState.value);
                     if (gain == 0.0f || !sigState.streaming) {
-                        constant = sig->buf[t] * gain;
-                        asleep = true;
-                        out.report(t, false, constant);
+                        filling = true;
+                        fillLeft = *blockLen;
+                        out.report(t, false, sig->buf[t] * gain);
                         return;
                     }
                 }
@@ -196,11 +205,18 @@ namespace meow {
                 if (!opened) { change(0); opened = true; }
                 splitBlock({ sig, vol },
                            [&](int a, int b) {
-                               if (asleep) std::fill(out.buf + a, out.buf + b, constant);
-                               else if (volState.streaming) vca.processStreaming(sig->buf + a, vol->buf + a, out.buf + a, b - a);
-                               else vca.processStaticVolume(sig->buf + a, gain, out.buf + a, b - a);
+                               if (filling) {
+                                   if (fillLeft < 1) return;  // asleep
+                                   std::fill(out.buf + a, out.buf + b, sig->buf[a] * gain);
+                                   fillLeft -= b - a;
+                               } else if (volState.streaming) {
+                                   vca.processStreaming(sig->buf + a, vol->buf + a, out.buf + a, b - a);
+                               } else {
+                                   vca.processStaticVolume(sig->buf + a, gain, out.buf + a, b - a);
+                               }
                            },
                            [&](const PinEvent& e) {
+                               if (e.ev.renotify) { out.renotify(e.time); return; }
                                (e.pin == 1 ? volState : sigState).apply(e.ev);
                                change(e.time);
                            });
@@ -215,9 +231,12 @@ namespace meow {
             Port out;
             InputState sa, sb, mixState;
             bool opened = false;
+            int fillLeft = 0;       // +0x80 while the output is static (process 0x10077030)
+            int* blockLen = nullptr;
 
             // Output state (0x10077070): streaming if the mix streams, else the "most streaming"
-            // of the two inputs; a static output carries the mixed static value.
+            // of the two inputs; a static output carries the mixed static value. With a static
+            // output the mix is still computed for one block length, then the module sleeps.
             void report(int t) {
                 bool streaming = mixState.streaming || sa.streaming || sb.streaming;
                 float v = 0.0f;
@@ -225,6 +244,7 @@ namespace meow {
                     float gA, gB;
                     xf.staticGains(mixState.value, gA, gB);
                     xf.processStatic(&sa.value, &sb.value, gA, gB, &v, 1);
+                    if (out.streaming || v != out.value || !opened) fillLeft = *blockLen;
                 }
                 out.report(t, streaming, v);
             }
@@ -236,13 +256,18 @@ namespace meow {
                            [&](int from, int to) {
                                if (mixState.streaming) {
                                    xf.processStreaming(a->buf + from, b->buf + from, mix->buf + from, out.buf + from, to - from);
-                               } else {
-                                   float gA, gB;
-                                   xf.staticGains(mixState.value, gA, gB);
-                                   xf.processStatic(a->buf + from, b->buf + from, gA, gB, out.buf + from, to - from);
+                                   return;
                                }
+                               if (!out.streaming) {
+                                   if (fillLeft < 1) return;  // asleep: the buffer keeps its contents
+                                   fillLeft -= to - from;
+                               }
+                               float gA, gB;
+                               xf.staticGains(mixState.value, gA, gB);
+                               xf.processStatic(a->buf + from, b->buf + from, gA, gB, out.buf + from, to - from);
                            },
                            [&](const PinEvent& e) {
+                               if (e.ev.renotify) { out.renotify(e.time); return; }
                                (e.pin == 0 ? sa : e.pin == 1 ? sb : mixState).apply(e.ev);
                                report(e.time);
                            });
@@ -342,6 +367,9 @@ namespace meow {
             Port* res = nullptr;
             Port out;
             bool opened = false;
+            int* blockLen = nullptr;
+            long* clock = nullptr;
+            long zeroStart = -1;   // absolute time the zeros began (audio input static)
 
             bool audioStreamingAt(int t) const {
                 bool s = in->startStreaming;
@@ -350,7 +378,9 @@ namespace meow {
             }
             void notify(int pin, int t) {
                 bool audio = audioStreamingAt(t);
+                flt.setBlockSize(*blockLen);
                 flt.inputStateChanged(pin, audio);
+                zeroStart = audio ? -1 : *clock + t;
                 // Output state (0x10002640): max(ONE_OFF, audio input state).
                 out.report(t, audio, 0.0f);
             }
@@ -366,7 +396,15 @@ namespace meow {
                     pendingType = -1;
                 }
                 splitBlock({ in, freq, res },
-                           [&](int a, int b) { flt.process(in->buf + a, freq->buf + a, res->buf + a, out.buf + a, b - a); },
+                           [&](int a, int b) {
+                               flt.process(in->buf + a, freq->buf + a, res->buf + a, out.buf + a, b - a);
+                               if (flt.takeZeroingDone() && zeroStart >= 0) {
+                                   // Measured on the original: downstream hears it one block length
+                                   // after the zeros began.
+                                   long t = zeroStart + *blockLen - *clock;
+                                   if (t >= 0 && t < gLen) out.renotify((int)t);
+                               }
+                           },
                            [&](const PinEvent& e) { notify(e.pin, e.time); },
                            // The SEM hears every state change of the audio input, but of Freq and
                            // Q|Res only their settling (becoming static); changes it does not hear
@@ -384,6 +422,7 @@ namespace meow {
             InputState inState;
             bool opened = false, asleep = false;
             int countdown = 0;  // +0x80
+            bool skipRest = false;  // after a re-notification the rest of the block isn't counted
 
             // With a static input (0x10078ad0) the delay keeps running until its output has been
             // 0 for a whole buffer length (counted per process call), then sleeps and reports a
@@ -403,15 +442,18 @@ namespace meow {
                                bool silent = true;
                                for (int i = a; i < b; i++) silent &= out.buf[i] == 0.0f;
                                if (!silent) { countdown = size; return; }
+                               if (skipRest) return;
                                countdown -= b - a;
                                if (countdown < 1) { asleep = true; out.report(b, false, out.buf[b - 1]); }
                            },
                            [&](const PinEvent& e) {
                                if (e.pin != 0) return;
+                               if (e.ev.renotify) { skipRest = true; return; }  // measured on the original
                                inState.apply(e.ev);
                                countdown = size;
                                if (e.ev.streaming && asleep) { asleep = false; out.report(e.time, true, 0.0f); }
                            });
+                skipRest = false;
                 if (!opened || (!asleep && out.events.empty() && !out.streaming)) out.report(0, true, 0.0f);
             }
         };
@@ -564,6 +606,9 @@ namespace meow {
         }
 
         void build(Voice& v) {
+            for (VcaNode* n : { &v.vcaNoise, &v.vcaVib, &v.vcaAmp, &v.vcaGainL, &v.vcaGainR }) n->blockLen = &blockLen;
+            for (XMixNode* n : { &v.noiseMix, &v.wetL, &v.wetR, &v.chorusL, &v.chorusR }) n->blockLen = &blockLen;
+            for (FilterNode* n : { &v.filterL, &v.filterR }) { n->blockLen = &blockLen; n->clock = &clock; }
             Port* S[kNumSliders];
             for (int i = 0; i < kNumSliders; i++) S[i] = &sliders[i]->out;
             v.k0.setConstant(0.0f);

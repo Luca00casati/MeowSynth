@@ -11,7 +11,6 @@ namespace meow {
 
     namespace {
         const double kDenormal = 1e-150;   // 0x1000f340
-        const int kSilenceLimit = 1024;    // module field +0x40
         const double kHalfPiIndex = 1570.7963267948965;  // 0x10014928: pi/2 / 0.001
 
         float flushOutput(double v) {
@@ -139,7 +138,7 @@ namespace meow {
             silent = out[i] == 0.0f ? silent + 1 : 0;
             phase = (phase + 1) & 3;
         }
-        if (silent > kSilenceLimit) sleeping = true;
+        if (silent > blockSize) sleeping = true;
     }
 
     void DhFilter::inputStateChanged(int pin, bool audioStreaming) {
@@ -160,7 +159,7 @@ namespace meow {
                 break;
         }
         if (!audioStreaming) {  // the audio input is static: write zeros, then stop
-            zeroCountdown = kSilenceLimit;
+            zeroCountdown = blockSize;
             zeroing = true;
         }
     }
@@ -174,7 +173,7 @@ namespace meow {
         if (zeroing) {  // 0x10002aa0
             for (; i < count; i++) out[i] = 0.0f;
             zeroCountdown -= count;
-            if (zeroCountdown < 1) suspended = true;
+            if (zeroCountdown < 1) { suspended = true; zeroingDone = true; }
             return;
         }
         if (sleeping) {  // 0x100020d0: pass silence; wake on the first non-zero input

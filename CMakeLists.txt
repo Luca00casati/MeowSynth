@@ -64,4 +64,7 @@ if(MEOWSYNTH_BUILD_TESTS AND NOT CMAKE_CROSSCOMPILING)
     add_test(NAME engine_matches_original_host37 COMMAND render_scenarios ${CMAKE_SOURCE_DIR}/tests/fixtures/host37 all 37)
     # 1000-sample host blocks: SynthEdit's block length becomes 100 (FUN_1005d140)
     add_test(NAME engine_matches_original_host1000 COMMAND render_scenarios ${CMAKE_SOURCE_DIR}/tests/fixtures/host1000 all 1000)
+    # 640 -> blocks of 80; 191 (prime) -> blocks of 191: module sleep timing differs from 512's
+    add_test(NAME engine_matches_original_host640 COMMAND render_scenarios ${CMAKE_SOURCE_DIR}/tests/fixtures/host640 all 640)
+    add_test(NAME engine_matches_original_host191 COMMAND render_scenarios ${CMAKE_SOURCE_DIR}/tests/fixtures/host191 all 191)
 endif()
