@@ -58,11 +58,13 @@ namespace meow {
         // Runs `run(from, to)` over the block, split at the input events, calling `onEvent`
         // at each one (after the samples before it are processed).
         void splitBlock(const std::vector<Port*>& pins, const std::function<void(int, int)>& run,
-                        const std::function<void(const PinEvent&)>& onEvent) {
+                        const std::function<void(const PinEvent&)>& onEvent,
+                        const std::function<bool(int, const Event&)>& delivered = nullptr) {
             std::vector<PinEvent> all;
             for (int p = 0; p < (int)pins.size(); p++)
                 if (pins[p])
-                    for (auto& e : pins[p]->events) all.push_back({ e.time, p, e });
+                    for (auto& e : pins[p]->events)
+                        if (!delivered || delivered(p, e)) all.push_back({ e.time, p, e });
             std::stable_sort(all.begin(), all.end(), [](const PinEvent& a, const PinEvent& b) {
                 return a.time != b.time ? a.time < b.time : a.pin < b.pin;
             });
@@ -201,10 +203,25 @@ namespace meow {
             Port* b = nullptr;
             Port* mix = nullptr;
             Port out;
-            InputState mixState;
+            InputState sa, sb, mixState;
+            bool opened = false;
+
+            // Output state (0x10077070): streaming if the mix streams, else the "most streaming"
+            // of the two inputs; a static output carries the mixed static value.
+            void report(int t) {
+                bool streaming = mixState.streaming || sa.streaming || sb.streaming;
+                float v = 0.0f;
+                if (!streaming) {
+                    float gA, gB;
+                    xf.staticGains(mixState.value, gA, gB);
+                    xf.processStatic(&sa.value, &sb.value, gA, gB, &v, 1);
+                }
+                out.report(t, streaming, v);
+            }
             void block() {
                 out.begin();
-                mixState.start(mix);
+                sa.start(a); sb.start(b); mixState.start(mix);
+                if (!opened) { report(0); opened = true; }
                 splitBlock({ a, b, mix },
                            [&](int from, int to) {
                                if (mixState.streaming) {
@@ -215,8 +232,10 @@ namespace meow {
                                    xf.processStatic(a->buf + from, b->buf + from, gA, gB, out.buf + from, to - from);
                                }
                            },
-                           [&](const PinEvent& e) { if (e.pin == 2) mixState.apply(e.ev); });
-                out.report(0, true, 0.0f);
+                           [&](const PinEvent& e) {
+                               (e.pin == 0 ? sa : e.pin == 1 ? sb : mixState).apply(e.ev);
+                               report(e.time);
+                           });
             }
         };
 
@@ -307,18 +326,24 @@ namespace meow {
 
         struct FilterNode {
             DhFilter flt;
+            int pendingType = -1;  // Filter Type list change at the block start
             Port* in = nullptr;
             Port* freq = nullptr;
             Port* res = nullptr;
             Port out;
             void block() {
                 out.begin();
+                if (pendingType >= 0) {
+                    flt.setType((DhFilter::Type)pendingType);
+                    flt.inputStateChanged(3);
+                    pendingType = -1;
+                }
                 splitBlock({ in, freq, res },
                            [&](int a, int b) { flt.process(in->buf + a, freq->buf + a, res->buf + a, out.buf + a, b - a); },
-                           [&](const PinEvent& e) {
-                               // Freq and Q|Res report only settling, not the start of streaming.
-                               if (e.pin == 0 || !e.ev.streaming) flt.inputStateChanged(e.pin);
-                           });
+                           [&](const PinEvent& e) { flt.inputStateChanged(e.pin); },
+                           // The SEM is told only when an input settles (becomes static), not when it
+                           // starts streaming; undelivered changes do not split its process calls.
+                           [](int, const Event& e) { return !e.streaming; });
                 out.report(0, true, 0.0f);
             }
         };
@@ -566,6 +591,10 @@ namespace meow {
             for (auto& p : paramQueue) {
                 int s = sliderForParam(p.first);
                 if (s >= 0) sliders[s]->pending.push_back({ 0, p.second });
+                if (p.first == MeowEngine::kFilterType) {  // list of 5: LP, HP, BP1, BP2, Notch
+                    int type = (int)(p.second * 4.0f + 0.5f);
+                    voice.filterL.pendingType = voice.filterR.pendingType = std::max(0, std::min(4, type));
+                }
             }
             paramQueue.clear();
             for (auto& m : midiQueue) {
