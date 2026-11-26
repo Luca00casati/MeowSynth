@@ -28,6 +28,7 @@ int main(int argc, char** argv) {
     PluginMain entry = dll ? (PluginMain)GetProcAddress(dll, "VSTPluginMain") : 0;
     if (!entry && dll) entry = (PluginMain)GetProcAddress(dll, "main");
     if (!entry) { std::fprintf(stderr, "cannot load\n"); return 1; }
+    resetTime();  // tempo 120 etc.: with tempo 0 the original's BPM Clock module loops forever
     Plugin* p = entry(&hostCallback);
     p->dispatcher(p, 0, 0, 0, 0, 0.0f);
     p->dispatcher(p, 10, 0, 0, 0, 44100.0f);
@@ -37,7 +38,8 @@ int main(int argc, char** argv) {
         int i; float v;
         if (std::sscanf(argv[a], "%d=%f", &i, &v) == 2) p->setParameter(p, i, v);
     }
-    p->dispatcher(p, 12, 0, 1, 0, 0.0f);
+    p->dispatcher(p, 12, 0, 1, 0, 0.0f);   // effMainsChanged (on)
+    p->dispatcher(p, 71, 0, 0, 0, 0.0f);   // effStartProcess
     short* rect = 0;  // ERect: top, left, bottom, right
     p->dispatcher(p, 13, 0, 0, &rect, 0.0f);
     int w = rect ? rect[3] - rect[1] : 400, h = rect ? rect[2] - rect[0] : 300;
@@ -60,11 +62,15 @@ int main(int argc, char** argv) {
     if (play > 0) {
         static float l[512], r[512];
         float* outs[2] = { l, r };
+        // SynthEdit keeps the VstEvents pointer and reads the events in the next process call,
+        // so they must stay alive until then.
+        static MidiEvent e;
+        static Events ev;
         auto send = [&](unsigned char s, unsigned char d1, unsigned char d2) {
-            MidiEvent e = {};
+            e = MidiEvent();
             e.type = 1; e.byteSize = sizeof(MidiEvent);
             e.midiData[0] = (char)s; e.midiData[1] = (char)d1; e.midiData[2] = (char)d2;
-            Events ev = {};
+            ev = Events();
             ev.numEvents = 1; ev.events[0] = &e;
             p->dispatcher(p, 25, 0, 0, &ev, 0.0f);
         };
@@ -73,6 +79,10 @@ int main(int argc, char** argv) {
             if (b == play && release > 0) send(0x80, 60, 0);
             p->processReplacing(p, 0, outs, 512);
             advanceTime(512);
+            // Like a host: the editor idles between audio blocks (SynthEdit's DSP->GUI queue is
+            // drained by the GUI; without this the original spins once it fills up).
+            p->dispatcher(p, 19, 0, 0, 0, 0.0f);
+            pump(12);
         }
         for (int k = 0; k < 10; k++) { p->dispatcher(p, 19, 0, 0, 0, 0.0f); pump(50); }
     }

@@ -56,8 +56,13 @@ The selectors are SynthEdit images whose animation position the mouse changes; h
 shows the next entry and a right-click the previous one.
 
 The cat follows the amplitude ADSR of the voice through `KDL Volts2GuiInt` (sampled at 40 Hz):
-frame = the envelope in volts (0..10), as an integer (truncated: "Rounding Mode 0"; not yet
-compared with the original, which crashes in snap_editor when a note plays with the editor open).
+frame = the envelope in volts (0..10), truncated ("Rounding Mode 0"). Checked against the original
+with notes held at sustain levels of 4.3, 4.7, 6.5 and 7.6 V (`snap_editor ... play=80`): same
+frames, and the whole editor pixel-identical.
+
+Driving the original in a test host: it keeps the VstEvents pointer and reads the events during
+the next process call (they must stay alive), and its BPM Clock module loops forever if the host
+reports a tempo of 0.
 
 ## DamSDK notes
 
