@@ -597,15 +597,10 @@ namespace meow {
                 }
             }
             paramQueue.clear();
-            for (auto& m : midiQueue) {
-                int s = m.s & 0xf0;
-                if (s == 0xb0 && (m.d1 == 1 || m.d1 == 5)) {  // mod wheel, portamento time
-                    int sl = m.d1 == 1 ? sVibAmount : sPortamento;
-                    sliders[sl]->pending.push_back({ m.offset, (float)m.d2 / 127.0f });
-                } else {
-                    voice.midi.pending.push_back({ m.offset, (unsigned)m.s | ((unsigned)m.d1 << 8) | ((unsigned)m.d2 << 16) });
-                }
-            }
+            // The sliders' MIDI CC assignments (mod wheel on Vibrato Amount, CC5 on Portamento) are
+            // not active in the exported plugin: the original ignores those controllers.
+            for (auto& m : midiQueue)
+                voice.midi.pending.push_back({ m.offset, (unsigned)m.s | ((unsigned)m.d1 << 8) | ((unsigned)m.d2 << 16) });
             midiQueue.clear();
 
             for (auto& s : sliders) s->block();
