@@ -3,10 +3,7 @@
 The original's editor is SynthEdit's panel for the `meow` skin: 335 x 228 pixels. Everything
 was measured on screenshots of the original under Wine (`tools/snap_editor.cpp`; put the exe next
 to the DLL you test, since Windows loads DLLs from the exe's folder first). The recreation's editor
-(32 and 64-bit) matches the original pixel for pixel for programs 0 and 3, except inside the three
-translucent selector boxes (speed, pitch-bend range, POLYCAT): SynthEdit draws images inside
-sub-containers through another blend path that isn't worked out yet, and those pixels are off by a
-few levels.
+(32 and 64-bit) matches the original pixel for pixel, for programs 0-5 and 9.
 
 ## Images
 
@@ -24,14 +21,22 @@ are not in the repository) and writes, into `assets/interface/`:
 | `URL` | 2 | 167 x 30 | the knobster.org link |
 
 DamSDK draws BMPs without alpha, so the script also writes 24-bit BMPs with every control's frames
-pre-blended over the panel at the control's position. SynthEdit's blend, fitted on its pixels:
-transparent pixels leave the panel alone, others give `(src * (a + 1) + dst * (255 - a)) >> 8`
-(opaque pixels are therefore copied).
+pre-blended over the panel at the control's position. SynthEdit has two blends:
+
+- Knobs (slider skins), fitted on its pixels: transparent pixels leave the panel alone, others
+  give `(src * (a + 1) + dst * (255 - a)) >> 8` (opaque pixels are therefore copied).
+- Images (`CMyBmpCtrl2`: the selectors and the link), FUN_1005eb10: in linear light. Tables
+  built by FUN_1005ea30: `t[i] = (int)(pow(i * (1/255.f), 2.2f) * 16384 + 0.5)` and the midpoints
+  between neighbours. Stored pixels carry transparency (255 - a): 0 copies, 255 skips; otherwise
+  `v = t[src] + trunc((t[dst] - t[src]) * u / 16384)` with `u = ((255 - a) * 16384 + 127) / 255`,
+  and the result is the largest k whose midpoint is below v (FUN_1005e3f0, a binary search).
 
 ## Layout
 
-The SynthEdit sliders draw as `knob_med` knobs at (control left, control top + 16); the frame is
-`round(value * 49)`.
+The SynthEdit sliders draw as `knob_med` knobs at (control left, control top + 16). The value is
+first rounded to a whole percent, then to the nearest frame: `round(round(value * 100) * 49 / 100)`
+(the frame boundaries, measured by moving a parameter on the original, sit halfway between
+hundredths).
 
 | control | position | parameter |
 |---|---|---|
@@ -39,7 +44,7 @@ The SynthEdit sliders draw as `knob_med` knobs at (control left, control top + 1
 | vibrato amount, attack | (200, 91), (230, 91) | 20, 21 |
 | porta, noise, chorus | (200, 146), (230, 146), (260, 146) | 17, 12, 1 |
 | speed | (266, 96) | 23 (frame = list index) |
-| pitch-bend range | (294, 151) | 25 (frame = list index) |
+| pitch-bend range | (294, 151) | 25 (frame = list index); its container ignores program changes, so it keeps the patch's value (11) |
 | POLYCAT | (199, 195) | 26 |
 | link | (15, 188) | opens http://knobster.org/projects/meowsynth/ |
 | cat | (18, 20) | the amplitude envelope |

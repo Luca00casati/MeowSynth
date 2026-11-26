@@ -13,8 +13,8 @@ namespace meow {
 
     class MeowSynthPlugin;
 
-    // A knob from a vertical strip of frames; the frame is round(value * (frames - 1)) like
-    // SynthEdit (DamSDK's Knob truncates, like VSTGUI).
+    // A knob from a vertical strip of frames, picking the frame like SynthEdit: the value is
+    // rounded to a whole percent, then to the nearest frame (DamSDK's Knob truncates instead).
     class SkinKnob : public DamSDK::Gui::Controls::Knob {
     public:
         SkinKnob(RECT* r, DamSDK::Gui::Controls::ControlListener* l, int param, int frames, int frameHeight,

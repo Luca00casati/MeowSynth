@@ -41,8 +41,11 @@ namespace meow {
         : Knob(r, l, param, frames, frameHeight, bmp, &kOrigin), frames(frames), frameHeight(frameHeight) {}
 
     void SkinKnob::onDraw(GDIDrawingContext* dc) {
+        // SynthEdit snaps the knob to a whole percent, then picks the nearest frame (the frame
+        // boundaries measured on the original sit halfway between hundredths).
         float v = value < 0.0f ? 0.0f : value > 1.0f ? 1.0f : value;
-        POINT where = { 0, (long)std::lround(v * (frames - 1)) * frameHeight };
+        int percent = (int)std::floor(v * 100.0 + 0.5);
+        POINT where = { 0, (long)std::floor(percent * (frames - 1) / 100.0 + 0.5) * frameHeight };
         if (bitmap) bitmap->blit(dc, &rect, &where);
         setDirty(false);
     }

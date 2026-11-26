@@ -369,3 +369,6 @@ Findings while matching the original end to end:
   37, 100, 256, 512 and 1024 samples (all scenarios at 37, 100 and 512). Larger blocks that are not
   powers of two (513, 640, 768, 1000) still differ slightly from the original (from 1e-6 up to the
   noise sequence in preset 1); the cause, something tied to the host-call grid, is not found yet.
+- Pitch-bend range: the container holding it has "Ignore Program Change", so every program
+  bends by the patch's stored range (index 11), not the per-program values in patch memory
+  (scenario `bend3`: program 3, whose stored value is 0).

@@ -534,7 +534,10 @@ namespace meow {
 
         // Current values of the patch-memory and list parameters.
         double rateV = 0, depthV = 0, minV = 0, phaseV = 0;
-        int divisionIndex = 0, bendIndex = 0, filterType = 0;
+        int divisionIndex = 0, filterType = 0;
+        // The pitch-bend range's container ignores program changes ("Ignore Program Change"),
+        // so it keeps the value stored with the patch (program 0's) whatever program is loaded.
+        int bendIndex = kPresetBend[0];
         bool mono = true;
         double appliedTempo = 0;
 
@@ -723,7 +726,7 @@ namespace meow {
         void loadMemories(int program) {
             int slot = presetSlot(program);
             rateV = kPresetRate[slot]; depthV = kPresetDepth[slot]; minV = kPresetMin[slot]; phaseV = kPresetPhase[slot];
-            divisionIndex = kDivisionIndex[slot]; bendIndex = kPresetBend[slot]; mono = kPresetMono[slot] != 0;
+            divisionIndex = kDivisionIndex[slot]; mono = kPresetMono[slot] != 0;
             filterType = 0;
             params[MeowEngine::kRate] = (float)((rateV - kMems[3].lo) / (kMems[3].hi - kMems[3].lo));
             params[MeowEngine::kDepth] = (float)(depthV / 5.0);

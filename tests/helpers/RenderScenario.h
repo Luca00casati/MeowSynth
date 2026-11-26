@@ -185,6 +185,16 @@ namespace RenderScenario {
         { 100,  0, 0x80, 60,   0 },
     };
 
+    // Pitch bend on a program whose stored bend range (0) differs from program 0's (11): the
+    // range's container ignores program changes, so the bend uses 11 semitones.
+    const ScheduledMidi kBendMidi[] = {
+        {  2,   0, 0x90, 60, 100 },
+        { 20,   0, 0xe0, 0x00, 0x60 },   // bend up
+        { 40,   0, 0xe0, 0x00, 0x20 },   // bend down
+        { 60,   0, 0xe0, 0x00, 0x40 },   // centre
+        { 80,   0, 0x80, 60,   0 },
+    };
+
     const ScheduledMidi kPresetMidi[] = {
         {  2,   0, 0x90, 60, 100 },
         { 30,   0, 0x90, 64, 100 },
@@ -204,6 +214,7 @@ namespace RenderScenario {
         { "preset3",   3, 100, 0, 0, kPresetMidi, RS_COUNT(kPresetMidi) },
         { "preset4",   4, 100, 0, 0, kPresetMidi, RS_COUNT(kPresetMidi) },
         { "preset5",   5, 100, 0, 0, kPresetMidi, RS_COUNT(kPresetMidi) },
+        { "bend3",     3, 100, 0, 0, kBendMidi, RS_COUNT(kBendMidi) },
     };
     const int kNumScenarios = RS_COUNT(kScenarios);
 

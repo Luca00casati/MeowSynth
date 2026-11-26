@@ -81,6 +81,31 @@ def png_rgba(data):
     return w, h, out
 
 
+def _f32(v):
+    return struct.unpack('<f', struct.pack('<f', v))[0]
+
+
+# SynthEdit's gamma tables (FUN_1005ea30): linear light in 14 bits, t[i] = (int)(pow(i / 255,
+# 2.2) * 16384 + 0.5) with float constants, and the midpoints between entries for the way back.
+GAMMA = [int((i * _f32(1 / 255)) ** _f32(2.2) * 16384.0 + 0.5) for i in range(256)]
+GAMMA_MID = [0] + [(GAMMA[k - 1] + GAMMA[k]) // 2 for k in range(1, 256)]
+
+
+def gamma_blend(s, a, d):
+    """FUN_1005eb10: blend in linear light; used for images inside sub-containers."""
+    u = ((255 - a) * 0x4000 + 0x7f) // 0xff
+    x = (GAMMA[d] - GAMMA[s]) * u
+    v = (-((-x) >> 14) if x < 0 else x >> 14) + GAMMA[s]
+    lo, hi = 0, 255  # FUN_1005e3f0: the largest k with GAMMA_MID[k] < v (else 0)
+    while lo < hi:
+        mid = (lo + hi + 1) // 2
+        if GAMMA_MID[mid] < v:
+            lo = mid
+        else:
+            hi = mid - 1
+    return lo
+
+
 class Canvas:
     """An RGB image; images are alpha-composited onto it like SynthEdit draws its panel."""
 
@@ -88,7 +113,7 @@ class Canvas:
         self.w, self.h = w, h
         self.px = bytearray(bytes(rgb) * (w * h))
 
-    def draw(self, img, x0, y0, src_y=0, src_h=None):
+    def draw(self, img, x0, y0, src_y=0, src_h=None, gamma=False):
         w, h, d = img
         src_h = h - src_y if src_h is None else src_h
         for y in range(src_h):
@@ -104,8 +129,11 @@ class Canvas:
                 t = (ty * self.w + tx) * 3
                 if a == 0:  # transparent pixels leave the panel as is
                     continue
-                for k in range(3):  # SynthEdit's blend (fits its panel pixel for pixel)
-                    self.px[t + k] = (d[s + k] * (a + 1) + self.px[t + k] * (255 - a)) >> 8
+                for k in range(3):
+                    if gamma:
+                        self.px[t + k] = gamma_blend(d[s + k], a, self.px[t + k])
+                    else:  # SynthEdit's blend for panel-level images (fits its pixels exactly)
+                        self.px[t + k] = (d[s + k] * (a + 1) + self.px[t + k] * (255 - a)) >> 8
 
     def crop(self, x, y, w, h):
         c = Canvas(w, h)
@@ -129,6 +157,8 @@ class Canvas:
 # image, position, and for strips the parameter that picks the frame.
 PANEL_SIZE = (335, 228)
 PANEL_AT = (-2, 0)
+# Images inside sub-containers (the selectors) are blended in linear light (gamma 2.2).
+GAMMA_BLENDED = {'lfo', 'pitchrange', 'polycat', 'url'}
 STRIPS = {  # output name: (skin image, x, y)
     'knob_m': ('knob_med', 200, 28), 'knob_o': ('knob_med', 230, 28), 'knob_e': ('knob_med', 260, 28),
     'knob_w': ('knob_med', 290, 28), 'knob_vibamount': ('knob_med', 200, 91),
@@ -151,7 +181,7 @@ def composite(out, images, info):
         for f in range(n):
             frame = Canvas(fw, fh)
             frame.px[:] = under.px
-            frame.draw(images[img], 0, 0, f * fh, fh)
+            frame.draw(images[img], 0, 0, f * fh, fh, gamma=name in GAMMA_BLENDED)
             strip.px[f * fw * fh * 3:(f + 1) * fw * fh * 3] = frame.px
         strip.save_bmp(os.path.join(out, name + '.bmp'))
         print(f'{name + ".bmp":18} {n} frames at ({x}, {y})')
