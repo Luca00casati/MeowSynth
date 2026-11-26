@@ -284,3 +284,49 @@ suspension or reset). This does not affect the output, because those voices are 
   cross-fade `0x100acc80`, and the pulse/PW variants (not used by MeowSynth).
 - How SynthEdit schedules blocks and pin events. The original has 7 samples of latency from MIDI
   to output.
+
+## Remaining small modules
+
+- **Divide** (`ug_math_div`): `(float)((a/b)*0.1)` when both inputs stream; with b static it uses
+  `a * (float)(0.1/b)`, with a static `(float)(a*0.1) / b`. The both-static output matches
+  `(a/b)*0.1` in the preset traces.
+- **Multiply** (`ug_math_mult`): `(float)((a*b)*10)`.
+- **BPM Clock2** Tempo Out = host BPM / 10. **Fixed Values** and **Switch (Many->1)** pass their
+  values through.
+- Tempo-sync LFO pitch = `Divide(Tempo Out, Multiply(6000, division/10))`. At 120 BPM and 1/8 this
+  is 0.0016, which in 1 V/kHz mode is 16 Hz.
+- Chorus knobs: DSP value = patch-memory value / 10 (`FloatToVolts`).
+  - Rate → pitch of both chorus oscillators (1 V/oct).
+  - Phase → the second oscillator's Phase Mod.
+  - Depth → the Level Adj gains.
+  - Min → added to the delay modulation: `(osc + 0.5) * depth + min`.
+
+## VST parameters (alphabetical, as the original lists them) → modules
+
+| # | Name | Range (volts) | Drives |
+|---|---|---|---|
+| 0 | Attack | 0..10 | Peak Follower attack |
+| 1 | Chorus | -5..5 | chorus X-Mix mix |
+| 2 | Cutoff | 0..10 | filter Freq (pitch), plus EnvMod × peak |
+| 3 | Decay | 0..10 | Peak Follower decay |
+| 4 | Depth | 0..5 (patch mem) | chorus Level Adj gain |
+| 5 | Dry/Wet | -5..5 | filter X-Mix mix |
+| 6 | E | 0..10 | amp ADSR sustain |
+| 7 | EnvMod | 0..10 | Level Adj (peak × envmod) into Freq |
+| 8 | Filter Type | list LP,HP,BP1,BP2,Notch | filter type |
+| 9 | Gain | 0..10 | filter-section VCA |
+| 10 | M | 0..10 | amp ADSR attack |
+| 11 | Min | 0..5 (patch mem) | chorus delay modulation offset |
+| 12 | Noise | -5..-4 | noise X-Mix mix |
+| 13 | O | 0..10 | amp ADSR decay |
+| 14, 15 | Patch Mem - Text | | display only |
+| 16 | Phase | 0..10 (patch mem) | chorus oscillator 2 Phase Mod |
+| 17 | Portamento time | 4..10 | Midi to CV portamento (MIDI CC5) |
+| 18 | Q | 0..10 | filter Res |
+| 19 | Rate | -10.4252..-0.4594 (patch mem) | chorus oscillators' pitch |
+| 20 | Vibrato Amount | 0..10 | vibrato ADSR Overall Level (MIDI CC1) |
+| 21 | Vibrato Attack | 0..10 | vibrato ADSR attack |
+| 22 | W | 0..10 | amp ADSR release |
+| 23 | Waveform | division list | LFO tempo division |
+| 25 | Waveform | list | pitch-bend range (11) |
+| 26 | Waveform | Off/On | Midi to CV mono mode |
