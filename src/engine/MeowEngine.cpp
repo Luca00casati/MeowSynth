@@ -440,6 +440,19 @@ namespace meow {
         enum SliderId { sAttack, sChorus, sCutoff, sDecay, sDryWet, sE, sEnvMod, sGain, sM, sNoise, sO,
                         sPortamento, sQ, sVibAmount, sVibAttack, sW, kNumSliders };
 
+        const int kParamForSlider[] = {
+            MeowEngine::kAttack, MeowEngine::kChorus, MeowEngine::kCutoff, MeowEngine::kDecay, MeowEngine::kDryWet,
+            MeowEngine::kE, MeowEngine::kEnvMod, MeowEngine::kGain, MeowEngine::kM, MeowEngine::kNoise, MeowEngine::kO,
+            MeowEngine::kPortamento, MeowEngine::kQ, MeowEngine::kVibratoAmount, MeowEngine::kVibratoAttack, MeowEngine::kW,
+        };
+
+        // Patch-memory floats: volts range (the VST parameter is normalized over it).
+        struct MemInfo { int param; double lo, hi; };
+        const MemInfo kMems[] = {
+            { MeowEngine::kDepth, 0.0, 5.0 }, { MeowEngine::kMin, 0.0, 5.0 }, { MeowEngine::kPhase, 0.0, 10.0 },
+            { MeowEngine::kRate, -10.425200462341309, -0.45940008759498596 },
+        };
+
         int sliderForParam(int p) {
             switch (p) {
                 case MeowEngine::kAttack: return sAttack;
@@ -472,6 +485,9 @@ namespace meow {
         const int kPresetMono[6] = { 1, 1, 1, 0, 0, 0 };
         // LFO division list (index -> Fixed Values volts): 4b, 2b, 1b, 2/1, 1/1, 1/2, 1/4, 1/8, 1/12, 1/16
         const float kDivisions[10] = { 16, 8, 4, 2, 1, 0.5f, 0.25f, 0.125f, 0.08333f, 0.0625f };
+        const char* const kDivisionNames[10] = { "4b", "2b", "1b", "2/1", "1/1", "1/2", "1/4", "1/8", "1/12", "1/16" };
+        const char* const kFilterTypeNames[5] = { "LP", "HP", "BP1", "BP2", "Notch" };
+        const char* const kProgramNames[6] = { "Clear cat", "Old cat", "March cat", "Catband", "Gospel cats", "Patch   6" };
 
         struct Voice {
             MidiNode midi;
@@ -516,6 +532,12 @@ namespace meow {
         int suspendCountdown[kVoices];   // blocks until a quiet voice is suspended (-1: not quiet)
         bool suspended[kVoices] = {};
 
+        // Current values of the patch-memory and list parameters.
+        double rateV = 0, depthV = 0, minV = 0, phaseV = 0;
+        int divisionIndex = 0, bendIndex = 0, filterType = 0;
+        bool mono = true;
+        double appliedTempo = 0;
+
         struct PendingMidi { int offset; unsigned char s, d1, d2; };
         std::vector<PendingMidi> midiQueue;
         std::vector<std::pair<int, float>> paramQueue;
@@ -529,7 +551,7 @@ namespace meow {
         float lfoPitchValue() const {
             // Divide(Tempo Out, Multiply(6000, division / 10)), see docs/dsp-notes.md
             float tempoOut = (float)(tempo / 10.0);
-            float division = (float)((double)kDivisions[kDivisionIndex[program]] * 0.10000000149011612);
+            float division = (float)((double)kDivisions[divisionIndex] * 0.10000000149011612);
             float mult = (float)((double)6000.0f * division * 10.0f);
             return (float)(((double)tempoOut / mult) * 0.10000000149011612);
         }
@@ -695,48 +717,115 @@ namespace meow {
             v.chorusL.block(); v.chorusR.block();
         }
 
-        void open() {
-            // sliders start at the program's values (a step); patch memory and lists likewise
+        static int presetSlot(int program) { return program < 6 ? program : 5; }
+
+        // Loads the program's patch-memory and list values (before open: the initial state).
+        void loadMemories(int program) {
+            int slot = presetSlot(program);
+            rateV = kPresetRate[slot]; depthV = kPresetDepth[slot]; minV = kPresetMin[slot]; phaseV = kPresetPhase[slot];
+            divisionIndex = kDivisionIndex[slot]; bendIndex = kPresetBend[slot]; mono = kPresetMono[slot] != 0;
+            filterType = 0;
+            params[MeowEngine::kRate] = (float)((rateV - kMems[3].lo) / (kMems[3].hi - kMems[3].lo));
+            params[MeowEngine::kDepth] = (float)(depthV / 5.0);
+            params[MeowEngine::kMin] = (float)(minV / 5.0);
+            params[MeowEngine::kPhase] = (float)(phaseV / 10.0);
+            params[MeowEngine::kDivision] = divisionIndex / 9.0f;
+            params[MeowEngine::kBendRange] = bendIndex / 12.0f;
+            params[MeowEngine::kMonoMode] = mono ? 0.0f : 1.0f;
+            params[MeowEngine::kFilterType] = 0.0f;
             for (int i = 0; i < kNumSliders; i++) {
                 const ParamInfo& p = kSliders[i];
-                float norm = (float)((p.presets[program] - p.lo) / (p.hi - p.lo));
-                sliders[i]->slider.setSampleRate(fs);
-                sliders[i]->slider.setInitial(p.presets[program]);
-                params[i] = norm;
+                params[kParamForSlider[i]] = (float)((p.presets[slot] - p.lo) / (p.hi - p.lo));
             }
-            lfoPitch.setConstant(lfoPitchValue());
-            chorusPitch.setConstant((float)(kPresetRate[program] * 0.10000000149011612));
-            pm0.setConstant(0.0f);
-            pm1.setConstant((float)(kPresetPhase[program] * 0.10000000149011612));
-            half.setConstant(0.5f);
-            depth.setConstant((float)(kPresetDepth[program] * 0.10000000149011612));
-            min.setConstant((float)(kPresetMin[program] * 0.10000000149011612));
+        }
+
+        void setStatic(Port& port, float v) {  // a static value change at the block start
+            std::fill(port.buf, port.buf + kBlock, v);
+            port.report(0, false, v);
+        }
+
+        void applyMemories() {  // after a change: new static values at the block start
+            setStatic(lfoPitch, lfoPitchValue());
+            setStatic(chorusPitch, (float)(rateV * 0.10000000149011612));
+            setStatic(pm1, (float)(phaseV * 0.10000000149011612));
+            setStatic(depth, (float)(depthV * 0.10000000149011612));
+            setStatic(min, (float)(minV * 0.10000000149011612));
             for (auto& v : voices) {
-                v.midi.cv.setMonoMode(kPresetMono[program] != 0);
-                v.midi.cv.setBendRange(kPresetBend[program]);
+                v.midi.cv.setMonoMode(mono);
+                v.midi.cv.setBendRange(bendIndex);
+            }
+            masterCv.setBendRange(bendIndex);
+        }
+
+        void open() {
+            // sliders start at the program's values (a step); patch memory and lists likewise
+            loadMemories(program);
+            const int slot = presetSlot(program);
+            for (int i = 0; i < kNumSliders; i++) {
+                sliders[i]->slider.setSampleRate(fs);
+                sliders[i]->slider.setInitial(kSliders[i].presets[slot]);
+            }
+            appliedTempo = tempo;
+            lfoPitch.setConstant(lfoPitchValue());
+            chorusPitch.setConstant((float)(rateV * 0.10000000149011612));
+            pm0.setConstant(0.0f);
+            pm1.setConstant((float)(phaseV * 0.10000000149011612));
+            half.setConstant(0.5f);
+            depth.setConstant((float)(depthV * 0.10000000149011612));
+            min.setConstant((float)(minV * 0.10000000149011612));
+            for (auto& v : voices) {
+                v.midi.cv.setMonoMode(mono);
+                v.midi.cv.setBendRange(bendIndex);
                 v.midi.cv.setSampleRate(fs);
             }
             masterCv.setMaster(true);
             masterCv.setMonoMode(false);
-            masterCv.setBendRange(kPresetBend[program]);
+            masterCv.setBendRange(bendIndex);
             masterCv.setSampleRate(fs);
             started = true;
         }
 
+        // A program change while running: sliders glide to the new values, the rest steps.
+        void changeProgram(int p) {
+            program = p;
+            loadMemories(p);
+            const int slot = presetSlot(p);
+            for (int i = 0; i < kNumSliders; i++) {
+                const ParamInfo& pi = kSliders[i];
+                sliders[i]->pending.push_back({ 0, (float)((pi.presets[slot] - pi.lo) / (pi.hi - pi.lo)) });
+            }
+            memoriesDirty = true;
+            for (auto& v : voices) v.filterL.pendingType = v.filterR.pendingType = 0;
+        }
+        bool memoriesDirty = false;
+        int pendingProgram = -1;
+
         void block(float* l, float* r) {
             // host events
+            if (pendingProgram >= 0) { changeProgram(pendingProgram); pendingProgram = -1; }
             for (auto& p : paramQueue) {
                 int s = sliderForParam(p.first);
                 if (s >= 0) sliders[s]->pending.push_back({ 0, p.second });
-                if (p.first == MeowEngine::kFilterType) {  // list of 5: LP, HP, BP1, BP2, Notch
-                    int type = (int)(p.second * 4.0f + 0.5f);
-                    for (auto& v : voices) v.filterL.pendingType = v.filterR.pendingType = std::max(0, std::min(4, type));
+                const float v = std::max(0.0f, std::min(1.0f, p.second));
+                switch (p.first) {
+                    case MeowEngine::kFilterType:  // list of 5: LP, HP, BP1, BP2, Notch
+                        filterType = std::max(0, std::min(4, (int)(v * 4.0f + 0.5f)));
+                        for (auto& vc : voices) vc.filterL.pendingType = vc.filterR.pendingType = filterType;
+                        break;
+                    case MeowEngine::kRate: rateV = kMems[3].lo + (kMems[3].hi - kMems[3].lo) * v; memoriesDirty = true; break;
+                    case MeowEngine::kDepth: depthV = 5.0 * v; memoriesDirty = true; break;
+                    case MeowEngine::kMin: minV = 5.0 * v; memoriesDirty = true; break;
+                    case MeowEngine::kPhase: phaseV = 10.0 * v; memoriesDirty = true; break;
+                    case MeowEngine::kDivision: divisionIndex = (int)(v * 9.0f + 0.5f); memoriesDirty = true; break;
+                    case MeowEngine::kBendRange: bendIndex = (int)(v * 12.0f + 0.5f); memoriesDirty = true; break;
+                    case MeowEngine::kMonoMode: mono = v < 0.5f; memoriesDirty = true; break;
+                    default: break;
                 }
             }
             paramQueue.clear();
             // The sliders' MIDI CC assignments (mod wheel on Vibrato Amount, CC5 on Portamento) are
             // not active in the exported plugin: the original ignores those controllers.
-            if (kPresetMono[program]) {  // mono: every note goes to the first voice
+            if (mono) {  // mono: every note goes to the first voice
                 for (auto& m : midiQueue) {
                     voices[0].midi.pending.push_back({ m.offset, (unsigned)m.s | ((unsigned)m.d1 << 8) | ((unsigned)m.d2 << 16) });
                     if ((m.s & 0xf0) == 0x90 && m.d2 > 0) { suspended[0] = false; suspendCountdown[0] = -1; }
@@ -748,18 +837,35 @@ namespace meow {
 
             for (auto& s : sliders) s->block();
             for (Port* p : { &lfoPitch, &chorusPitch, &pm0, &pm1, &half, &depth, &min, &zeroPort, &pw, &pmDepth }) p->begin();
+            if (tempo != appliedTempo) { appliedTempo = tempo; memoriesDirty = true; }
+            if (memoriesDirty) { applyMemories(); memoriesDirty = false; }
             lfo.block();
             chorusOsc1.block(); chorusOsc2.block();
             chorusOff1.block(); chorusOff2.block();
             chorusDepth1.block(); chorusDepth2.block();
             chorusMod1.block(); chorusMod2.block();
 
-            std::fill(l, l + gLen, 0.0f);
-            std::fill(r, r + gLen, 0.0f);
+            // The output is SynthEdit's implicit adder over the voices that are running: the
+            // first one's samples, then the others added in voice order (so a lone -0 stays -0).
+            bool any = false;
             for (int i = 0; i < kVoices; i++) {
                 Voice& v = voices[i];
-                if (!suspended[i]) runVoice(v);
-                for (int k = 0; k < gLen; k++) { l[k] += v.chorusL.out.buf[k]; r[k] += v.chorusR.out.buf[k]; }
+                if (suspended[i]) continue;
+                runVoice(v);
+                if (!any) {
+                    std::memcpy(l, v.chorusL.out.buf, sizeof(float) * gLen);
+                    std::memcpy(r, v.chorusR.out.buf, sizeof(float) * gLen);
+                    any = true;
+                } else {
+                    for (int k = 0; k < gLen; k++) { l[k] += v.chorusL.out.buf[k]; r[k] += v.chorusR.out.buf[k]; }
+                }
+            }
+            if (!any) {
+                std::fill(l, l + gLen, 0.0f);
+                std::fill(r, r + gLen, 0.0f);
+            }
+            for (int i = 0; i < kVoices; i++) {
+                Voice& v = voices[i];
                 // A voice whose outputs have gone static is suspended two blocks later (it then
                 // stops processing, so its noise oscillator stops drawing from the generator).
                 if (!suspended[i]) {
@@ -778,7 +884,46 @@ namespace meow {
 
     void MeowEngine::setSampleRate(float fs) { impl->fs = fs; }
     void MeowEngine::setTempo(double bpm) { impl->tempo = bpm; }
-    void MeowEngine::setProgram(int p) { impl->program = std::max(0, std::min(5, p)); }
+    void MeowEngine::setProgram(int p) {
+        p = std::max(0, std::min(kNumPrograms - 1, p));
+        if (!impl->started) { impl->program = p; impl->loadMemories(p); }
+        else impl->pendingProgram = p;
+    }
+    int MeowEngine::getProgram() const { return impl->pendingProgram >= 0 ? impl->pendingProgram : impl->program; }
+    const char* MeowEngine::programName(int p) {
+        static char names[16][24];
+        if (p < 0 || p >= kNumPrograms) return "";
+        if (p < 5) return kProgramNames[p];
+        std::snprintf(names[p], sizeof(names[p]), "Patch %3d", p + 1);
+        return names[p];
+    }
+    const char* MeowEngine::parameterName(int i) {
+        static const char* const names[kNumParams] = {
+            "Attack", "Chorus", "Cutoff", "Decay", "Depth", "Dry/Wet", "E", "EnvMod", "Filter Type", "Gain", "M",
+            "Min", "Noise", "O", "Patch Mem - Text", "Patch Mem - Text", "Phase", "Portamento time", "Q", "Rate",
+            "Vibrato Amount", "Vibrato Attack", "W", "Waveform", "Waveform", "Waveform", "Waveform",
+        };
+        return i >= 0 && i < kNumParams ? names[i] : "";
+    }
+    void MeowEngine::parameterDisplay(int i, char* text, int size) const {
+        const float v = getParameter(i);
+        int s = sliderForParam(i);
+        if (s >= 0) {
+            const ParamInfo& p = kSliders[s];
+            std::snprintf(text, size, "%.3f", p.lo + (p.hi - p.lo) * v);
+            return;
+        }
+        for (auto& m : kMems)
+            if (m.param == i) { std::snprintf(text, size, "%.2f", m.lo + (m.hi - m.lo) * v); return; }
+        switch (i) {
+            case kFilterType: std::snprintf(text, size, "%s", kFilterTypeNames[std::max(0, std::min(4, (int)(v * 4.0f + 0.5f)))]); return;
+            case kText1: case kText2: std::snprintf(text, size, "ms"); return;
+            case kDivision: std::snprintf(text, size, "%s", kDivisionNames[std::max(0, std::min(9, (int)(v * 9.0f + 0.5f)))]); return;
+            case kBendRange: std::snprintf(text, size, "%d", (int)(v * 12.0f + 0.5f)); return;
+            case kMonoMode: std::snprintf(text, size, "%s", v < 0.5f ? "On" : "Off"); return;
+            default: if (size > 0) text[0] = 0; return;
+        }
+    }
     void MeowEngine::setParameter(int i, float v) {
         if (i < 0 || i >= kNumParams) return;
         impl->params[i] = v;

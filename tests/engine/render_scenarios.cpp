@@ -2,14 +2,16 @@
 // Copyright (C) 2026 Luca Casati
 // Renders the scenarios of tests/helpers/RenderScenario.h with this project's engine and compares
 // them with the original's renders in tests/fixtures.
-//   g++ -O2 -std=c++17 -frounding-math -ffp-contract=off -I src -I tests/helpers \
+//   g++ -O2 -std=c++17 -frounding-math -ffp-contract=off -I src -I tests/helpers
 //       tests/engine/render_scenarios.cpp src/dsp/*.cpp src/engine/*.cpp -o render_scenarios
+// (or the CMake target render_scenarios)
 //   ./render_scenarios tests/fixtures [scenario|all] [hostBlockSize]
 #include "RenderScenario.h"
 #include "engine/MeowEngine.h"
 #include "dsp/Oscillator.h"
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
@@ -56,7 +58,10 @@ int main(int argc, char** argv) {
         long first = -1, mism = 0;
         double maxAbs = 0;
         for (size_t i = 0; i < std::min(got, out.size()); i++) {
-            if (out[i] != ref[i]) {
+            uint32_t a, b;  // bitwise: -0 and +0 differ too
+            std::memcpy(&a, &out[i], 4);
+            std::memcpy(&b, &ref[i], 4);
+            if (a != b) {
                 mism++;
                 if (first < 0) first = (long)i / 2;
                 maxAbs = std::fmax(maxAbs, std::fabs((double)out[i] - ref[i]));

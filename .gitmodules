@@ -1,0 +1,3 @@
+[submodule "src/damsdk"]
+	path = src/damsdk
+	url = git@github.com:Luca00casati/DamSDK.git

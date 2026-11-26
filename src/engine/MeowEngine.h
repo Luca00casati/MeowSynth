@@ -27,9 +27,14 @@ namespace meow {
 
         void setSampleRate(float fs);
         void setTempo(double bpm);
-        void setProgram(int program);           // 0..5
+        static const int kNumPrograms = 16;     // 5 named presets, then "Patch 6".."Patch 16"
+        void setProgram(int program);
+        int getProgram() const;
+        static const char* programName(int program);
         void setParameter(int index, float value);  // normalized, takes effect at the next block
         float getParameter(int index) const;
+        static const char* parameterName(int index);
+        void parameterDisplay(int index, char* text, int size) const;  // like the original
 
         // MIDI at a sample offset within the next process() call.
         void midi(int offset, unsigned char status, unsigned char data1, unsigned char data2);

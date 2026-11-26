@@ -18,6 +18,23 @@ So instead of decompiling the whole DLL, this project:
 
 The decoded graph (modules, settings, wiring, presets) is in [docs/patch-graph.txt](docs/patch-graph.txt).
 
+## Building
+
+```sh
+git submodule update --init                      # DamSDK
+cmake -S . -B build/x86_64 -DCMAKE_TOOLCHAIN_FILE=cmake/mingw-x86_64.cmake -DCMAKE_BUILD_TYPE=Release
+cmake --build build/x86_64                       # build/x86_64/MeowSynth.dll (64-bit VST 2.x)
+cmake -S . -B build/i686 -DCMAKE_TOOLCHAIN_FILE=cmake/mingw-i686.cmake -DCMAKE_BUILD_TYPE=Release
+cmake --build build/i686                         # build/i686/MeowSynth.dll (32-bit)
+```
+
+The engine and its tests also build natively (`cmake -S . -B build/native && cmake --build
+build/native && ctest --test-dir build/native`).
+
+Both plugin builds produce **the same samples as the original, bit for bit**, in every reference
+scenario (checked by loading them in the same Wine harness as the original, see below). The
+engine also matches the original with host blocks of 37, 100, 256, 512 and 1024 samples.
+
 ## Tools
 
 Needs Python 3 with `pefile`, and a copy of the original `MeowSynth.dll` (not included).
@@ -37,21 +54,25 @@ your own copy of the plugin. `tools/ghidra/` has the Ghidra scripts used to find
 `tests/fixtures/*.f32` are renders of the original plugin (interleaved stereo float32, 44.1 kHz) for
 the scenarios in `tests/helpers/RenderScenario.h`. Each scenario isolates part of the signal chain
 with the plugin's own parameters (filter dry, chorus dry, no noise, ...). The original is fully
-deterministic, so the recreation can be compared sample by sample. To re-record (needs 32-bit Wine):
+deterministic, so the recreation can be compared sample by sample. Its white-noise generator is
+shared by the whole DLL, so render each scenario in its own process. To re-record (needs 32-bit Wine):
 
 ```sh
 i686-w64-mingw32-g++ -O2 -static -I tests/helpers tools/render_reference.cpp -o render_reference.exe
-wine render_reference.exe MeowSynth.dll tests/fixtures
+for s in voice legato filter vibrato chorus preset0 preset1 preset2 preset3 preset4 preset5; do
+    wine render_reference.exe MeowSynth.dll tests/fixtures $s          # 512-sample host blocks
+    wine render_reference.exe MeowSynth.dll tests/fixtures/host37 $s 37
+done
 i686-w64-mingw32-g++ -O2 -static -I tests/helpers tools/probe_plugin.cpp -o probe_plugin.exe
 wine probe_plugin.exe MeowSynth.dll    # parameters, programs, I/O
 ```
 
 ## Roadmap
 - [x] Decode and fully parse the embedded SynthEdit project.
-- [ ] Reverse engineer the DSP of each module the patch uses.
+- [x] Reverse engineer the DSP of each module the patch uses ([docs/dsp-notes.md](docs/dsp-notes.md)).
 - [x] Reference renders from the original plugin (under Wine).
-- [ ] Audio tests against the references.
-- [ ] Synth engine on DamSDK, 32 and 64-bit builds.
+- [x] Audio tests against the references: bit-exact.
+- [x] Synth engine on DamSDK, 32 and 64-bit builds.
 - [ ] Interface (panel, knobs, cat animation) from the original skin.
 
 ## Licensing
