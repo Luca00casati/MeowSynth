@@ -364,3 +364,8 @@ Findings while matching the original end to end:
   voices hold INT_MAX), else the one with the oldest note-on; ties go to the highest index.
   Note-on (FUN_1002e840) stores channel, note, note-on time and release time INT_MAX; note-off
   (FUN_1002ea40 / FUN_1002df80) sets the release time.
+- Host block size: SynthEdit splits each process call into blocks of up to 128 samples starting at
+  the call; the engine does the same. Verified bit-exact against the original at host blocks of
+  37, 100, 256, 512 and 1024 samples (all scenarios at 37, 100 and 512). Larger blocks that are not
+  powers of two (513, 640, 768, 1000) still differ slightly from the original (from 1e-6 up to the
+  noise sequence in preset 1); the cause, something tied to the host-call grid, is not found yet.
