@@ -21,8 +21,10 @@ namespace meow {
 
     namespace {
 
-        const int kBlock = 128;  // SynthEdit's internal block size (the most per block)
-        int gLen = kBlock;       // length of the block being processed: host calls are split into
+        // Buffer capacity. SynthEdit's block length (FUN_1005d140) follows the host's block size
+        // and is usually 37..191 samples, but a prime host block size gives blocks as long as it.
+        const int kBlock = 4096;
+        thread_local int gLen = 128;  // length of the block being processed
                                  // blocks of up to 128 samples, starting at each call
         const int kVoices = 6;
 
@@ -538,6 +540,8 @@ namespace meow {
         // The pitch-bend range's container ignores program changes ("Ignore Program Change"),
         // so it keeps the value stored with the patch (program 0's) whatever program is loaded.
         int bendIndex = kPresetBend[0];
+        int blockLen = 128;   // DAT_10199a68
+        long blockEnd = 0;    // the block grid's last boundary (absolute, +0x4c)
         bool mono = true;
         double appliedTempo = 0;
 
@@ -944,13 +948,39 @@ namespace meow {
 
     float MeowEngine::envelopeLevel() const { return impl->envelope.load(std::memory_order_relaxed); }
 
+    int MeowEngine::blockSizeFor(int hostBlockSize) {  // FUN_1005d140
+        const int n = hostBlockSize;
+        if (n < 96) return n < 1 ? 1 : n;
+        int block = 96;
+        const int q = n / 96;
+        for (int i = q; i > 0; i--)
+            if (n % i == 0) { block = n / i; break; }
+        int span = 192 - block;
+        if (span < 31) span = 30;
+        for (int i = q + 1; i < n / span; i++)
+            if (n % i == 0) { block = n / i; break; }
+        return block;
+    }
+
+    void MeowEngine::setBlockSize(int hostBlockSize) {
+        impl->blockLen = std::min(kBlock, blockSizeFor(hostBlockSize));
+        for (auto& v : impl->voices) {
+            v.envNoise.adsr.blockSize = v.envVib.adsr.blockSize = v.envAmp.adsr.blockSize = impl->blockLen;
+        }
+    }
+
     void MeowEngine::process(float* left, float* right, int count) {
         if (!impl->started) impl->open();
         // MIDI offsets are relative to this call; hand each internal block its share.
         std::vector<Impl::PendingMidi> all = std::move(impl->midiQueue);
         impl->midiQueue.clear();
-        for (int pos = 0; pos < count; pos += kBlock) {
-            gLen = std::min(kBlock, count - pos);
+        // FUN_1005d670: blocks follow an absolute grid of blockLen samples (it carries on across
+        // process calls), and are also cut where the call ends.
+        for (int pos = 0; pos < count; pos += gLen) {
+            long next = impl->blockEnd + impl->blockLen;
+            long n = next - impl->clock;
+            if (n == 0) { impl->blockEnd = next; n = impl->blockLen; }
+            gLen = (int)std::min<long>(n, count - pos);
             for (auto& m : all)
                 if (m.offset >= pos && m.offset < pos + gLen)
                     impl->midiQueue.push_back({ m.offset - pos, m.s, m.d1, m.d2 });

@@ -27,6 +27,7 @@ namespace meow {
         bool getPresetNameByIndex(int32_t category, int32_t index, char* text) override;
 
         void setSampleRate(float sampleRate) override;
+        void setMaxFramesPerProcess(int32_t blockSize) override;  // effSetBlockSize
         void enableAudioProcessing() override;
         void invokeAudioProcess(float** inputs, float** outputs, int32_t frames) override;  // accumulating
         void processAudio(float** inputs, float** outputs, int32_t frames) override;        // replacing

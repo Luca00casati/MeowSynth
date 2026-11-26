@@ -77,6 +77,9 @@ namespace meow {
         float output = 0;            // +0xb0 = overall * current
         int remaining = 0;           // +0xa0, samples left in the segment
         int holdSamples = 0;         // +0x80, how long a constant output is written before sleeping
+    public:
+        int blockSize = 128;         // DAT_10199a68, SynthEdit's block length
+    private:
     };
 
 }

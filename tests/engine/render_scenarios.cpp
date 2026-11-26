@@ -33,6 +33,7 @@ int main(int argc, char** argv) {
         meow::MeowEngine e;
         e.setSampleRate((float)kSampleRate);
         e.setTempo(kTempo);
+        e.setBlockSize(hostBlock);
         e.setProgram(sc.program);
         std::vector<float> out;
         std::vector<float> l(hostBlock), r(hostBlock);
@@ -55,6 +56,11 @@ int main(int argc, char** argv) {
         std::vector<float> ref(out.size());
         size_t got = f ? std::fread(ref.data(), 4, ref.size(), f) : 0;
         if (f) std::fclose(f);
+        if (got != out.size()) {  // a missing or short reference is a failure, not a pass
+            std::printf("%-8s MISSING reference %s (%zu of %zu samples)\n", sc.name, path.c_str(), got, out.size());
+            failures++;
+            continue;
+        }
         long first = -1, mism = 0;
         double maxAbs = 0;
         for (size_t i = 0; i < std::min(got, out.size()); i++) {

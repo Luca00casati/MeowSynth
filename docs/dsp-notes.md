@@ -364,11 +364,20 @@ Findings while matching the original end to end:
   voices hold INT_MAX), else the one with the oldest note-on; ties go to the highest index.
   Note-on (FUN_1002e840) stores channel, note, note-on time and release time INT_MAX; note-off
   (FUN_1002ea40 / FUN_1002df80) sets the release time.
-- Host block size: SynthEdit splits each process call into blocks of up to 128 samples starting at
-  the call; the engine does the same. Verified bit-exact against the original at host blocks of
-  37, 100, 256, 512 and 1024 samples (all scenarios at 37, 100 and 512). Larger blocks that are not
-  powers of two (513, 640, 768, 1000) still differ slightly from the original (from 1e-6 up to the
-  noise sequence in preset 1); the cause, something tied to the host-call grid, is not found yet.
+- Block length (FUN_1005d140): SynthEdit derives its block length from the host's block size
+  (effSetBlockSize), n: under 96 it is n. Otherwise, with q = n / 96, it takes n / i for the
+  largest i <= q dividing n, then, with span = max(192 - that, 30), switches to n / i for the
+  smallest i in q+1 .. n / span - 1 dividing n, if any. E.g. 512 -> 128, 640 -> 80, 768 -> 96, 1000 -> 100, 513 -> 57, 600
+  -> 100, 191 -> 191. Blocks follow an absolute grid of that length that carries on across
+  process calls (FUN_1005d670), and are also cut where a call ends. The ADSR's hold after a
+  static output and the Midi to CV smoothers' constant fill last one block length. Verified
+  bit-exact against the original at host blocks of 37, 100, 256, 333, 512, 513, 768, 1000 and
+  1024 samples (`MeowEngine::blockSizeFor`).
+- Still open: at 640 (blocks of 80) and 191 the original suspends a voice that went quiet after a
+  release one block later than the engine (two blocks later otherwise, which every other case
+  confirms). Modules sleep individually in SynthEdit (static output written for one block length,
+  then unlinked at the next call, FUN_10070830 / FUN_10070800); the engine models the voice as
+  a whole. Only the shared noise sequence after such a release differs (vibrato, presets 3 and 4).
 - Pitch-bend range: the container holding it has "Ignore Program Change", so every program
   bends by the patch's stored range (index 11), not the per-program values in patch memory
   (scenario `bend3`: program 3, whose stored value is 0).

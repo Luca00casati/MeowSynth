@@ -28,6 +28,10 @@ namespace meow {
 
         void setSampleRate(float fs);
         void setTempo(double bpm);
+        // The host's maximum block size (effSetBlockSize): SynthEdit derives its internal block
+        // length from it, which shapes the output slightly.
+        void setBlockSize(int hostBlockSize);
+        static int blockSizeFor(int hostBlockSize);
         static const int kNumPrograms = 16;     // 5 named presets, then "Patch 6".."Patch 16"
         void setProgram(int program);
         int getProgram() const;

@@ -75,6 +75,11 @@ namespace meow {
         engine.setSampleRate(sampleRate);
     }
 
+    void MeowSynthPlugin::setMaxFramesPerProcess(int32_t blockSize) {
+        AudioBaseExtended::setMaxFramesPerProcess(blockSize);
+        engine.setBlockSize(blockSize);
+    }
+
     void MeowSynthPlugin::enableAudioProcessing() { requestMidiSupport(1); }
 
     void MeowSynthPlugin::updateTempo() {

@@ -34,7 +34,8 @@ build/native && ctest --test-dir build/native`).
 
 Both plugin builds produce **the same samples as the original, bit for bit**, in every reference
 scenario (checked by loading them in the same Wine harness as the original, see below). The
-engine also matches the original with host blocks of 37, 100, 256, 512 and 1024 samples.
+engine also matches the original at other host block sizes (37 to 1024 samples tested; SynthEdit
+derives its internal block length from the host's, see docs/dsp-notes.md for the one open case).
 
 ## Tools
 

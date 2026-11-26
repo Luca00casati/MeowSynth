@@ -44,7 +44,7 @@ namespace meow {
                 overall = inputValue(kOverallLevel, buffers, offset);
                 current = target;
                 mode = kHold;
-                holdSamples = 128;  // DAT_10199a68 = block size
+                holdSamples = blockSize;  // DAT_10199a68
                 changes.push_back({ offset, false, overall * current });
             }
             return;
