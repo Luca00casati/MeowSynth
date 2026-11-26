@@ -15,6 +15,7 @@
 #include "dsp/Slider.h"
 #include "dsp/PeakFollower.h"
 #include "dsp/Delay.h"
+#include "dsp/DhFilter.h"
 #include "RenderScenario.h"
 #include <limits>
 #include <string>
@@ -317,6 +318,76 @@ static void checkDelay(const Trace& t) {
     }
 }
 
+// DH_MultiFilter2 (ug_plugin2 instances with 8 plugs): Pitch/Res input mode, gain
+// compensation on, 1 stage; type taken from the scenario (LP unless the Filter Type changes).
+static void checkDhFilter(const Trace& t, const char* scenario) {
+    // Filter Type changes from the scenario: normalized value -> list index (5 entries).
+    std::vector<std::pair<long, int>> typeChanges;
+    for (int s = 0; s < RenderScenario::kNumScenarios; s++) {
+        const auto& sc = RenderScenario::kScenarios[s];
+        if (!scenario || std::strcmp(sc.name, scenario)) continue;
+        for (int p = 0; p < sc.numParams; p++)
+            if (sc.params[p].index == RenderScenario::kFilterType && sc.params[p].block > 0)
+                typeChanges.push_back({ (long)sc.params[p].block * RenderScenario::kBlockSize,
+                                        (int)(sc.params[p].value * 4.0f + 0.5f) });
+    }
+    for (auto* in : t.find("ug_plugin2")) {
+        if (in->plugs.size() != 8) continue;
+        auto x = t.samples(*in, 0), f = t.samples(*in, 1), q = t.samples(*in, 2), ref = t.samples(*in, 6);
+        bool any = false;
+        for (float v : ref) if (v != 0.0f) { any = true; break; }
+        if (!any) continue;
+        DhFilter flt;
+        flt.setSampleRate(44100.0f);
+        std::vector<float> out(ref.size());
+        // Input state changes (streaming while the value keeps changing) split the process calls.
+        const std::vector<float>* pins[3] = { &x, &f, &q };
+        bool streaming[3] = {};
+        // initial states are set before processing starts (no event)
+        for (int k = 0; k < 3; k++) streaming[k] = (*pins[k])[1] != (*pins[k])[0] && (*pins[k])[2] != (*pins[k])[1];
+        size_t n = out.size(), runStart = 0;
+        for (size_t i = 1; i <= n; i++) {
+            bool event = i == n || i % t.block == 0;
+            int newType = -1;
+            for (auto& tc : typeChanges) if (tc.first == (long)i) { newType = tc.second; event = true; }
+            int fired[3] = { 0, 0, 0 };
+            if (i < n)
+                for (int k = 0; k < 3; k++) {
+                    const auto& v = *pins[k];
+                    // compare bit patterns: a stream of alternating +0/-0 is still streaming
+                    auto differ = [&](size_t a, size_t b) { return std::memcmp(&v[a], &v[b], 4) != 0; };
+                    bool changed = differ(i, i - 1);
+                    bool next = i + 1 < n && differ(i + 1, i);
+                    // A value that repeats briefly (e.g. at the peak of a modulation) is still
+                    // streaming: only treat it as static if it then stays constant for a while.
+                    bool settles = true;
+                    for (size_t j = i + 1; j < std::min(n, i + 33); j++) settles &= !differ(j, i);
+                    bool s2 = changed ? next || !settles : (streaming[k] && !settles);
+                    if (s2 != streaming[k] || (!s2 && changed)) {
+                        // The filter gets no event when Freq or Q starts streaming (only when it settles).
+                        bool quiet = s2 && !streaming[k] && k > 0;
+                        streaming[k] = s2;
+                        if (!quiet) { fired[k] = 1; event = true; }
+                    }
+                }
+            if (event) {
+                if (i > runStart) flt.process(&x[runStart], &f[runStart], &q[runStart], &out[runStart], (int)(i - runStart));
+                runStart = i;
+                for (int k = 0; k < 3; k++) if (fired[k]) flt.inputStateChanged(k);
+                if (newType >= 0) { flt.setType((DhFilter::Type)newType); flt.inputStateChanged(3); }
+            }
+        }
+        Result r;
+        for (size_t i = 0; i < out.size(); i++) compare(r, (long)i, out[i], ref[i]);
+        char name[64];
+        std::snprintf(name, sizeof(name), "dh filter #%d", in->n);
+        report(name, r);
+        if (getenv("DEBUG_DH") && r.first >= 0 && atoi(getenv("DEBUG_DH")) == in->n)
+            for (long i = r.first - 2; i < r.first + 4; i++)
+                std::printf("  %ld mine %.9g ref %.9g in %.9g f %.9g q %.9g\n", i, out[i], ref[i], x[i], f[i], q[i]);
+    }
+}
+
 int main(int argc, char** argv) {
     if (argc < 2) { std::fprintf(stderr, "usage: %s trace [scenario [bendRange]]\n", argv[0]); return 1; }
     Trace t;
@@ -329,6 +400,7 @@ int main(int argc, char** argv) {
     checkDryWetSlider(t);
     checkPeakFollower(t);
     checkDelay(t);
+    checkDhFilter(t, argc > 2 ? argv[2] : nullptr);
     if (argc > 2) checkMidiToCv(t, argv[2], argc > 3 ? atoi(argv[3]) : 12);
     return 0;
 }
