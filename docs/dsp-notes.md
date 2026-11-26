@@ -330,3 +330,29 @@ suspension or reset). This does not affect the output, because those voices are 
 | 23 | Waveform | division list | LFO tempo division |
 | 25 | Waveform | list | pitch-bend range (11) |
 | 26 | Waveform | Off/On | Midi to CV mono mode |
+
+## Engine (src/engine/MeowEngine.cpp)
+
+The engine runs the patch per 128-sample block, in data-flow order, with each connection's
+static/streaming state changes at exact samples. `tests/engine/render_scenarios.cpp` compares
+it with the reference renders; voice, legato, filter, vibrato, chorus and presets 0-2 are
+bit-exact (both channels, every sample).
+
+Findings while matching the original end to end:
+
+- Reference renders: the noise generator's seed is a DLL-wide global, so a scenario's output
+  depends on what ran before it in the same process. Each fixture is rendered in its own
+  process (`render_reference.exe MeowSynth.dll outdir <scenario>`) and the test resets the seed.
+- Slider presets are the patch's stored doubles; value = (float)(stored * 0.1). Going through a
+  normalized float first is off by an ulp (it showed up in the vibrato attack of preset 1).
+- The sliders' MIDI CC assignments (mod wheel, CC5) are inactive in the exported plugin.
+- The Peak Follower's input is the filter container's two inputs summed (both are wired to it).
+- X-Mix output state: streaming if the mix or either input streams, else static.
+- VCA output state: static when Volume is static and either the gain is 0 or the signal is static.
+- DH filter (0x10002640): it hears every state change of its audio input, but of Freq and Q|Res
+  only their settling. At each notification it reports max(ONE_OFF, audio state) on its output;
+  while the audio input is static it writes zeros for 1024 samples (0x10002aa0), then stops.
+- Delay2 with a static input (0x10078ad0) keeps running until its output has been 0 for a whole
+  buffer length, then reports a static output and sleeps.
+- Voice suspension: a voice whose outputs went static during block n still runs blocks n+1 and
+  n+2, then is suspended (its noise oscillator then stops drawing from the shared generator).

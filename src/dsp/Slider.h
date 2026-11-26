@@ -19,10 +19,10 @@ namespace meow {
         // Normalized parameter value (0x100bccf0). Returns false if the target did not change.
         bool setNormalized(float p);
 
-        // At open: the normalized value, applied as a step (no glide). Until the output is first
+        // At open: the stored value (volts), applied as a step (no glide). Until the output is first
         // processed its current value stays 0, so a change before that glides from 0.
-        void setInitialNormalized(float p) {
-            value = (float)((((double)max - min) * p + min) * 0.10000000149011612);
+        void setInitial(double volts) {
+            value = (float)(volts * 0.10000000149011612);
             smoother.set(value, 0);
         }
         bool isGliding() const { return streamingStart; }

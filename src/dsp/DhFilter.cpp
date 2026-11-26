@@ -142,7 +142,8 @@ namespace meow {
         if (silent > kSilenceLimit) sleeping = true;
     }
 
-    void DhFilter::inputStateChanged(int pin) {
+    void DhFilter::inputStateChanged(int pin, bool audioStreaming) {
+        suspended = zeroing = false;
         sleeping = true;  // the handler first selects the sleep process
         switch (pin) {
             case 1: case 2:  // Freq, Q|Res: back to normal processing
@@ -158,10 +159,24 @@ namespace meow {
             default:  // audio input: sleep until a non-zero sample, which resets the state
                 break;
         }
+        if (!audioStreaming) {  // the audio input is static: write zeros, then stop
+            zeroCountdown = kSilenceLimit;
+            zeroing = true;
+        }
     }
 
     void DhFilter::process(const float* in, const float* freq, const float* res, float* out, int count) {
         int i = 0;
+        if (suspended) {  // the host no longer calls the module: its output buffer keeps zeros
+            for (; i < count; i++) out[i] = 0.0f;
+            return;
+        }
+        if (zeroing) {  // 0x10002aa0
+            for (; i < count; i++) out[i] = 0.0f;
+            zeroCountdown -= count;
+            if (zeroCountdown < 1) suspended = true;
+            return;
+        }
         if (sleeping) {  // 0x100020d0: pass silence; wake on the first non-zero input
             while (i < count && in[i] == 0.0f) {
                 out[i++] = 0.0f;

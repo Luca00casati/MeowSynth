@@ -23,8 +23,10 @@ namespace meow {
 
         // An input pin changed state (static <-> streaming, or a new static value): 0x10002640.
         // The original then starts a new process call, so call process() separately for the
-        // samples before and after.
-        void inputStateChanged(int pin);
+        // samples before and after. audioStreaming: the state of the audio input (pin 0) then.
+        // While the audio input is static the module writes zeros for 1024 samples, then the
+        // host stops calling it (it stays silent until the next notification).
+        void inputStateChanged(int pin, bool audioStreaming = true);
 
         // in/out: audio; freq/res: the Freq and Q|Res inputs (per sample).
         void process(const float* in, const float* freq, const float* res, float* out, int count);
@@ -47,6 +49,9 @@ namespace meow {
         unsigned phase = 0;                   // +0x1c0, masked with 3
         int silent = 0;                       // +0x68: consecutive zero outputs
         bool sleeping = true;                 // process function 0x100020d0
+        bool zeroing = false;                 // process function 0x10002aa0
+        bool suspended = false;               // after zeroing: not processed any more
+        int zeroCountdown = 0;                // +0x1dc
     };
 
 }

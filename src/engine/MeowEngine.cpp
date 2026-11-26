@@ -165,16 +165,18 @@ namespace meow {
             Port* sig = nullptr;
             Port* vol = nullptr;
             Port out;
-            InputState volState;
+            InputState volState, sigState;
             bool opened = false;
             float gain = 0.0f, constant = 0.0f;
             bool asleep = false;
 
+            // Output state (0x100c2b00): static when Volume is static and either the gain is 0 or
+            // the signal is static too; then a constant is written once and the module sleeps.
             void change(int t) {
                 asleep = false;
                 if (!volState.streaming) {
                     gain = vca.staticGain(volState.value);
-                    if (gain == 0.0f) {  // output static: written once, then the module sleeps
+                    if (gain == 0.0f || !sigState.streaming) {
                         constant = sig->buf[t] * gain;
                         asleep = true;
                         out.report(t, false, constant);
@@ -186,6 +188,7 @@ namespace meow {
             void block() {
                 out.begin();
                 volState.start(vol);
+                sigState.start(sig);
                 if (!opened) { change(0); opened = true; }
                 splitBlock({ sig, vol },
                            [&](int a, int b) {
@@ -193,7 +196,10 @@ namespace meow {
                                else if (volState.streaming) vca.processStreaming(sig->buf + a, vol->buf + a, out.buf + a, b - a);
                                else vca.processStaticVolume(sig->buf + a, gain, out.buf + a, b - a);
                            },
-                           [&](const PinEvent& e) { if (e.pin == 1) { volState.apply(e.ev); change(e.time); } });
+                           [&](const PinEvent& e) {
+                               (e.pin == 1 ? volState : sigState).apply(e.ev);
+                               change(e.time);
+                           });
             }
         };
 
@@ -331,57 +337,103 @@ namespace meow {
             Port* freq = nullptr;
             Port* res = nullptr;
             Port out;
+            bool opened = false;
+
+            bool audioStreamingAt(int t) const {
+                bool s = in->startStreaming;
+                for (auto& x : in->events) if (x.time <= t) s = x.streaming;
+                return s;
+            }
+            void notify(int pin, int t) {
+                bool audio = audioStreamingAt(t);
+                flt.inputStateChanged(pin, audio);
+                // Output state (0x10002640): max(ONE_OFF, audio input state).
+                out.report(t, audio, 0.0f);
+            }
             void block() {
                 out.begin();
+                if (!opened) {
+                    opened = true;
+                    out.report(0, in->startStreaming, 0.0f);
+                }
                 if (pendingType >= 0) {
                     flt.setType((DhFilter::Type)pendingType);
-                    flt.inputStateChanged(3);
+                    notify(3, 0);
                     pendingType = -1;
                 }
                 splitBlock({ in, freq, res },
                            [&](int a, int b) { flt.process(in->buf + a, freq->buf + a, res->buf + a, out.buf + a, b - a); },
-                           [&](const PinEvent& e) { flt.inputStateChanged(e.pin); },
-                           // The SEM is told only when an input settles (becomes static), not when it
-                           // starts streaming; undelivered changes do not split its process calls.
-                           [](int, const Event& e) { return !e.streaming; });
-                out.report(0, true, 0.0f);
+                           [&](const PinEvent& e) { notify(e.pin, e.time); },
+                           // The SEM hears every state change of the audio input, but of Freq and
+                           // Q|Res only their settling (becoming static); changes it does not hear
+                           // do not split its process calls.
+                           [](int pin, const Event& e) { return pin == 0 || !e.streaming; });
             }
         };
 
         struct DelayNode {
             Delay2 d;
+            int size = 1;
             Port* in = nullptr;
             Port* mod = nullptr;
             Port out;
+            InputState inState;
+            bool opened = false, asleep = false;
+            int countdown = 0;  // +0x80
+
+            // With a static input (0x10078ad0) the delay keeps running until its output has been
+            // 0 for a whole buffer length (counted per process call), then sleeps and reports a
+            // static output.
             void block() {
                 out.begin();
-                d.process(in->buf, mod->buf, out.buf, kBlock);
-                out.report(0, true, 0.0f);
+                inState.start(in);
+                if (!opened) {
+                    opened = true;
+                    if (!inState.streaming) countdown = size;
+                }
+                splitBlock({ in, mod },
+                           [&](int a, int b) {
+                               if (asleep) return;  // the buffer keeps its last contents
+                               d.process(in->buf + a, mod->buf + a, out.buf + a, b - a);
+                               if (inState.streaming) return;
+                               bool silent = true;
+                               for (int i = a; i < b; i++) silent &= out.buf[i] == 0.0f;
+                               if (!silent) { countdown = size; return; }
+                               countdown -= b - a;
+                               if (countdown < 1) { asleep = true; out.report(b, false, out.buf[b - 1]); }
+                           },
+                           [&](const PinEvent& e) {
+                               if (e.pin != 0) return;
+                               inState.apply(e.ev);
+                               countdown = size;
+                               if (e.ev.streaming && asleep) { asleep = false; out.report(e.time, true, 0.0f); }
+                           });
+                if (!opened || (!asleep && out.events.empty() && !out.streaming)) out.report(0, true, 0.0f);
             }
         };
 
         // ---- the patch ----------------------------------------------------------------------
 
-        struct ParamInfo { const char* name; float lo, hi; int sliderType; float presets[6]; };
+        struct ParamInfo { const char* name; float lo, hi; int sliderType; double presets[6]; };
 
-        // Sliders (volts). Preset values from the patch (Ctl_Slider stored values).
+        // Sliders (volts). Preset values: the patch's Ctl_Slider stored values (doubles), exactly.
         const ParamInfo kSliders[] = {
-            { "Attack", 0, 10, 1, { 4.7999913f, 4.7999913f, 4.7999913f, 4.7999913f, 4.7999913f, 4.7999913f } },
-            { "Chorus", -5, 5, 3, { -5.0f, 2.2499967f, -4.75f, 4.7499889f, 0.3499937f, 4.7499889f } },
-            { "Cutoff", 0, 10, 1, { 4.2999816f, 4.2999816f, 4.2999816f, 4.2999816f, 4.2999816f, 4.2999816f } },
-            { "Decay", 0, 10, 1, { 10, 10, 10, 10, 10, 10 } },
-            { "Dry/Wet", -5, 5, 2, { 5, 5, 5, 5, 5, 5 } },
-            { "E", 0, 10, 3, { 2.0999958f, 3.3499977f, 2.5499964f, 4.0499923f, 3.9999965f, 4.749999f } },
-            { "EnvMod", 0, 10, 1, { 10, 10, 10, 10, 10, 10 } },
-            { "Gain", 0, 10, 1, { 10, 10, 10, 10, 10, 10 } },
-            { "M", 0, 10, 3, { 2.8999552f, 3.3999568f, 3.3499539f, 2.3999552f, 2.2999552f, 3.6999574f } },
-            { "Noise", -5, -4, 3, { -5.0f, -4.0f, -4.7300001f, -4.0f, -4.9500005f, -4.0f } },
-            { "O", 0, 10, 3, { 7.1999919f, 7.5499952f, 7.5999874f, 6.9499874f, 6.7999935f, 10.0f } },
-            { "Portamento time", 4, 10, 3, { 5.5599923f, 5.5599923f, 5.5599923f, 5.5599923f, 5.5599923f, 5.5599923f } },
-            { "Q", 0, 10, 1, { 7.7999783f, 7.7999783f, 7.7999783f, 7.7999783f, 7.7999783f, 7.7999783f } },
-            { "Vibrato Amount", 0, 10, 3, { 0.0f, 10.0f, 7.0999885f, 1.4999893f, 1.0499897f, 10.0f } },
-            { "Vibrato Attack", 0, 10, 3, { 10.0f, 9.0499854f, 6.5999937f, 10.0f, 10.0f, 10.0f } },
-            { "W", 0, 10, 3, { 4.3168068f, 4.4168001f, 4.216803f, 3.866806f, 2.9668054f, 5.4668093f } },
+            { "Attack", 0, 10, 1, { 4.799991250038147, 4.799991250038147, 4.799991250038147, 4.799991250038147, 4.799991250038147, 4.799991250038147 } },
+            { "Chorus", -5, 5, 3, { -5.0, 2.2499966621398926, -4.750000014901161, 4.749988913536072, 0.3499937057495117, 4.749988913536072 } },
+            { "Cutoff", 0, 10, 1, { 4.299981594085693, 4.299981594085693, 4.299981594085693, 4.299981594085693, 4.299981594085693, 4.299981594085693 } },
+            { "Decay", 0, 10, 1, { 10.0, 10.0, 10.0, 10.0, 10.0, 10.0 } },
+            { "Dry/Wet", -5, 5, 2, { 5.0, 5.0, 5.0, 5.0, 5.0, 5.0 } },
+            { "E", 0, 10, 3, { 2.0999957621097565, 3.3499976992607117, 2.5499963760375977, 4.049992263317108, 3.9999964833259583, 4.749999046325684 } },
+            { "EnvMod", 0, 10, 1, { 10.0, 10.0, 10.0, 10.0, 10.0, 10.0 } },
+            { "Gain", 0, 10, 1, { 10.0, 10.0, 10.0, 10.0, 10.0, 10.0 } },
+            { "M", 0, 10, 3, { 2.8999552130699158, 3.3999568223953247, 3.3499538898468018, 2.399955242872238, 2.299955189228058, 3.6999574303627014 } },
+            { "Noise", -5, -4, 3, { -5.0, -4.0, -4.7300001084804535, -4.0, -4.950000509619713, -4.0 } },
+            { "O", 0, 10, 3, { 7.199991941452026, 7.549995183944702, 7.5999873876571655, 6.949987411499023, 6.799993515014648, 10.0 } },
+            { "Portamento time", 4, 10, 3, { 5.559992253780365, 5.559992253780365, 5.559992253780365, 5.559992253780365, 5.559992253780365, 5.559992253780365 } },
+            { "Q", 0, 10, 1, { 7.799978256225586, 7.799978256225586, 7.799978256225586, 7.799978256225586, 7.799978256225586, 7.799978256225586 } },
+            { "Vibrato Amount", 0, 10, 3, { 0.0, 10.0, 7.0999884605407715, 1.4999893307685852, 1.0499896854162216, 10.0 } },
+            { "Vibrato Attack", 0, 10, 3, { 10.0, 9.049985408782959, 6.599993705749512, 10.0, 10.0, 10.0 } },
+            { "W", 0, 10, 3, { 4.316806793212891, 4.416800141334534, 4.216803014278412, 3.8668060302734375, 2.966805398464203, 5.466809272766113 } },
         };
         enum SliderId { sAttack, sChorus, sCutoff, sDecay, sDryWet, sE, sEnvMod, sGain, sM, sNoise, sO,
                         sPortamento, sQ, sVibAmount, sVibAttack, sW, kNumSliders };
@@ -452,7 +504,9 @@ namespace meow {
         OscNode chorusOsc1{ Oscillator::kSine, false, true }, chorusOsc2{ Oscillator::kSine, false, true };
         AdderNode chorusOff1, chorusOff2, chorusMod1, chorusMod2;
         MulNode chorusDepth1, chorusDepth2;
-        Voice voice;
+        Voice voices[kVoices];
+        int suspendCountdown[kVoices];   // blocks until a quiet voice is suspended (-1: not quiet)
+        bool suspended[kVoices] = {};
 
         struct PendingMidi { int offset; unsigned char s, d1, d2; };
         std::vector<PendingMidi> midiQueue;
@@ -460,7 +514,8 @@ namespace meow {
 
         Impl() {
             for (auto& s : kSliders) sliders.emplace_back(new SliderNode(s.lo, s.hi, s.sliderType));
-            build();
+            buildGlobal();
+            for (int i = 0; i < kVoices; i++) { build(voices[i]); suspendCountdown[i] = -1; }
         }
 
         float lfoPitchValue() const {
@@ -471,8 +526,7 @@ namespace meow {
             return (float)(((double)tempoOut / mult) * 0.10000000149011612);
         }
 
-        void build() {
-            Voice& v = voice;
+        void build(Voice& v) {
             Port* S[kNumSliders];
             for (int i = 0; i < kNumSliders; i++) S[i] = &sliders[i]->out;
             v.k0.setConstant(0.0f);
@@ -480,9 +534,6 @@ namespace meow {
             v.k07.setConstant(0.7f);
             v.k04.setConstant(0.4f);
             v.k1.setConstant(1.0f);
-            zeroPort.setConstant(0.0f);
-            pw.setConstant(0.5f);
-            pmDepth.setConstant(0.5f);
 
             v.midi.portamento = S[sPortamento];
             // noise oscillator and its envelope (static times)
@@ -535,7 +586,20 @@ namespace meow {
             v.wetR.a = &v.filterR.out; v.wetR.b = &v.noiseMix.out; v.wetR.mix = S[sDryWet];
             v.vcaGainL.sig = &v.wetL.out; v.vcaGainL.vol = S[sGain];
             v.vcaGainR.sig = &v.wetR.out; v.vcaGainR.vol = S[sGain];
-            // chorus: global modulators, per-voice delays
+            v.delayL.in = &v.vcaGainL.out; v.delayL.mod = &chorusMod1.out;
+            v.delayR.in = &v.vcaGainR.out; v.delayR.mod = &chorusMod2.out;
+            v.delayL.d.setup(fs, 0.06f);
+            v.delayR.d.setup(fs, 0.06f);
+            v.delayL.size = v.delayR.size = (int)((double)fs * 0.06f);
+            v.chorusL.a = &v.delayL.out; v.chorusL.b = &v.vcaGainL.out; v.chorusL.mix = S[sChorus];
+            v.chorusR.a = &v.delayR.out; v.chorusR.b = &v.vcaGainR.out; v.chorusR.mix = S[sChorus];
+        }
+
+        void buildGlobal() {
+            zeroPort.setConstant(0.0f);
+            pw.setConstant(0.5f);
+            pmDepth.setConstant(0.5f);
+            // chorus: global modulators (each voice has its own delays)
             chorusOsc1.in[Oscillator::kPitch] = &chorusPitch;
             chorusOsc2.in[Oscillator::kPitch] = &chorusPitch;
             for (OscNode* o : { &chorusOsc1, &chorusOsc2 }) {
@@ -551,12 +615,6 @@ namespace meow {
             chorusDepth2.a = &chorusOff2.out; chorusDepth2.b = &depth;
             chorusMod1.in = { &chorusDepth1.out, &min };
             chorusMod2.in = { &chorusDepth2.out, &min };
-            v.delayL.in = &v.vcaGainL.out; v.delayL.mod = &chorusMod1.out;
-            v.delayR.in = &v.vcaGainR.out; v.delayR.mod = &chorusMod2.out;
-            v.delayL.d.setup(fs, 0.06f);
-            v.delayR.d.setup(fs, 0.06f);
-            v.chorusL.a = &v.delayL.out; v.chorusL.b = &v.vcaGainL.out; v.chorusL.mix = S[sChorus];
-            v.chorusR.a = &v.delayR.out; v.chorusR.b = &v.vcaGainR.out; v.chorusR.mix = S[sChorus];
             // LFO
             lfo.in[Oscillator::kPitch] = &lfoPitch;
             lfo.in[Oscillator::kPulseWidth] = &pw;
@@ -565,58 +623,10 @@ namespace meow {
             lfo.in[Oscillator::kPmDepth] = &pmDepth;
         }
 
-        void open() {
-            // sliders start at the program's values (a step); patch memory and lists likewise
-            for (int i = 0; i < kNumSliders; i++) {
-                const ParamInfo& p = kSliders[i];
-                float norm = (p.presets[program] - p.lo) / (p.hi - p.lo);
-                sliders[i]->slider.setSampleRate(fs);
-                sliders[i]->slider.setInitialNormalized(norm);
-                params[i] = norm;
-            }
-            lfoPitch.setConstant(lfoPitchValue());
-            chorusPitch.setConstant((float)(kPresetRate[program] * 0.10000000149011612));
-            pm0.setConstant(0.0f);
-            pm1.setConstant((float)(kPresetPhase[program] * 0.10000000149011612));
-            half.setConstant(0.5f);
-            depth.setConstant((float)(kPresetDepth[program] * 0.10000000149011612));
-            min.setConstant((float)(kPresetMin[program] * 0.10000000149011612));
-            voice.midi.cv.setMonoMode(kPresetMono[program] != 0);
-            voice.midi.cv.setBendRange(kPresetBend[program]);
-            started = true;
-        }
-
-        void block(float* l, float* r) {
-            // host events
-            for (auto& p : paramQueue) {
-                int s = sliderForParam(p.first);
-                if (s >= 0) sliders[s]->pending.push_back({ 0, p.second });
-                if (p.first == MeowEngine::kFilterType) {  // list of 5: LP, HP, BP1, BP2, Notch
-                    int type = (int)(p.second * 4.0f + 0.5f);
-                    voice.filterL.pendingType = voice.filterR.pendingType = std::max(0, std::min(4, type));
-                }
-            }
-            paramQueue.clear();
-            // The sliders' MIDI CC assignments (mod wheel on Vibrato Amount, CC5 on Portamento) are
-            // not active in the exported plugin: the original ignores those controllers.
-            for (auto& m : midiQueue)
-                voice.midi.pending.push_back({ m.offset, (unsigned)m.s | ((unsigned)m.d1 << 8) | ((unsigned)m.d2 << 16) });
-            midiQueue.clear();
-
-            for (auto& s : sliders) s->block();
-            for (Port* p : { &lfoPitch, &chorusPitch, &pm0, &pm1, &half, &depth, &min, &zeroPort, &pw, &pmDepth }) p->begin();
-            lfo.block();
-            chorusOsc1.block(); chorusOsc2.block();
-            chorusOff1.block(); chorusOff2.block();
-            chorusDepth1.block(); chorusDepth2.block();
-            chorusMod1.block(); chorusMod2.block();
-
-            Voice& v = voice;
+        void runVoice(Voice& v) {
             for (Port* p : { &v.k0, &v.k05, &v.k07, &v.k04, &v.k1 }) p->begin();
             v.midi.block(clock);
             v.noise.block();
-            // the other five voices' noise oscillators draw from the shared generator after it
-            for (int i = 0; i < (kVoices - 1) * kBlock; i++) Oscillator::noiseSeed = Oscillator::noiseSeed * 0x19660du + 0x3c6ef35fu;
             v.envNoise.block(); v.vcaNoise.block();
             v.envVib.block(); v.vcaVib.block(); v.pitchSum.block();
             v.osc.block();
@@ -628,13 +638,74 @@ namespace meow {
             v.vcaGainL.block(); v.vcaGainR.block();
             v.delayL.block(); v.delayR.block();
             v.chorusL.block(); v.chorusR.block();
-            if (std::getenv("MEOW_DUMP")) {
-                static FILE* df = std::fopen(std::getenv("MEOW_DUMP"), "wb");
-                for (Port* p : { &v.filterL.out, &v.freqSum.out, &v.noiseMix.out, &v.wetL.out, &v.peak.out, &v.envMod.out })
-                    std::fwrite(p->buf, 4, kBlock, df);
+        }
+
+        void open() {
+            // sliders start at the program's values (a step); patch memory and lists likewise
+            for (int i = 0; i < kNumSliders; i++) {
+                const ParamInfo& p = kSliders[i];
+                float norm = (float)((p.presets[program] - p.lo) / (p.hi - p.lo));
+                sliders[i]->slider.setSampleRate(fs);
+                sliders[i]->slider.setInitial(p.presets[program]);
+                params[i] = norm;
             }
-            std::memcpy(l, v.chorusL.out.buf, sizeof(float) * kBlock);
-            std::memcpy(r, v.chorusR.out.buf, sizeof(float) * kBlock);
+            lfoPitch.setConstant(lfoPitchValue());
+            chorusPitch.setConstant((float)(kPresetRate[program] * 0.10000000149011612));
+            pm0.setConstant(0.0f);
+            pm1.setConstant((float)(kPresetPhase[program] * 0.10000000149011612));
+            half.setConstant(0.5f);
+            depth.setConstant((float)(kPresetDepth[program] * 0.10000000149011612));
+            min.setConstant((float)(kPresetMin[program] * 0.10000000149011612));
+            for (auto& v : voices) {
+                v.midi.cv.setMonoMode(kPresetMono[program] != 0);
+                v.midi.cv.setBendRange(kPresetBend[program]);
+            }
+            started = true;
+        }
+
+        void block(float* l, float* r) {
+            // host events
+            for (auto& p : paramQueue) {
+                int s = sliderForParam(p.first);
+                if (s >= 0) sliders[s]->pending.push_back({ 0, p.second });
+                if (p.first == MeowEngine::kFilterType) {  // list of 5: LP, HP, BP1, BP2, Notch
+                    int type = (int)(p.second * 4.0f + 0.5f);
+                    for (auto& v : voices) v.filterL.pendingType = v.filterR.pendingType = std::max(0, std::min(4, type));
+                }
+            }
+            paramQueue.clear();
+            // The sliders' MIDI CC assignments (mod wheel on Vibrato Amount, CC5 on Portamento) are
+            // not active in the exported plugin: the original ignores those controllers.
+            // Mono mode: every note goes to the first voice. TODO: polyphonic voice allocation.
+            for (auto& m : midiQueue) {
+                voices[0].midi.pending.push_back({ m.offset, (unsigned)m.s | ((unsigned)m.d1 << 8) | ((unsigned)m.d2 << 16) });
+                if ((m.s & 0xf0) == 0x90 && m.d2 > 0) { suspended[0] = false; suspendCountdown[0] = -1; }
+            }
+            midiQueue.clear();
+
+            for (auto& s : sliders) s->block();
+            for (Port* p : { &lfoPitch, &chorusPitch, &pm0, &pm1, &half, &depth, &min, &zeroPort, &pw, &pmDepth }) p->begin();
+            lfo.block();
+            chorusOsc1.block(); chorusOsc2.block();
+            chorusOff1.block(); chorusOff2.block();
+            chorusDepth1.block(); chorusDepth2.block();
+            chorusMod1.block(); chorusMod2.block();
+
+            std::fill(l, l + kBlock, 0.0f);
+            std::fill(r, r + kBlock, 0.0f);
+            for (int i = 0; i < kVoices; i++) {
+                Voice& v = voices[i];
+                if (!suspended[i]) runVoice(v);
+                for (int k = 0; k < kBlock; k++) { l[k] += v.chorusL.out.buf[k]; r[k] += v.chorusR.out.buf[k]; }
+                // A voice whose outputs have gone static is suspended two blocks later (it then
+                // stops processing, so its noise oscillator stops drawing from the generator).
+                if (!suspended[i]) {
+                    bool quiet = !v.chorusL.out.streaming && !v.chorusR.out.streaming;
+                    if (!quiet) suspendCountdown[i] = -1;
+                    else if (suspendCountdown[i] < 0) suspendCountdown[i] = 2;
+                    else if (--suspendCountdown[i] == 0) suspended[i] = true;
+                }
+            }
             clock += kBlock;
         }
     };

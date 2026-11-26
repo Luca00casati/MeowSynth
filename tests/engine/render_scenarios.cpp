@@ -7,6 +7,7 @@
 //   ./render_scenarios tests/fixtures [scenario]
 #include "RenderScenario.h"
 #include "engine/MeowEngine.h"
+#include "dsp/Oscillator.h"
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -21,6 +22,9 @@ int main(int argc, char** argv) {
     for (int s = 0; s < kNumScenarios; s++) {
         const Scenario& sc = kScenarios[s];
         if (argc > 2 && std::strcmp(argv[2], sc.name)) continue;
+        // The noise generator is shared by the whole DLL; each reference was rendered in a
+        // fresh process, so start every scenario from the initial seed.
+        meow::Oscillator::noiseSeed = 0;
         meow::MeowEngine e;
         e.setSampleRate((float)kSampleRate);
         e.setTempo(kTempo);
