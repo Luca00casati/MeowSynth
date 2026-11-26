@@ -2,6 +2,9 @@
 # Copyright (C) 2026 Luca Casati
 cmake_minimum_required(VERSION 3.15)
 project(MeowSynth CXX)
+if(WIN32)
+    enable_language(RC)
+endif()
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -25,7 +28,20 @@ target_compile_options(MeowCore PRIVATE ${MEOW_FP_FLAGS})
 if(WIN32)
     file(GLOB_RECURSE DAMSDK_SOURCES src/damsdk/api/*.cpp src/damsdk/gui/*.cpp)
     file(GLOB PLUGIN_SOURCES src/plugin/*.cpp)
+    # The interface needs the bitmaps from your copy of the original (tools/extract_assets.py);
+    # without them the plugin builds without an editor (hosts show their generic controls).
+    if(EXISTS ${CMAKE_SOURCE_DIR}/assets/interface/background.bmp)
+        message(STATUS "MeowSynth: building the interface (assets/interface found)")
+        file(GLOB GUI_SOURCES src/gui/*.cpp)
+        list(APPEND PLUGIN_SOURCES ${GUI_SOURCES} resources.rc)
+        set(MEOW_HAS_GUI ON)
+    else()
+        message(STATUS "MeowSynth: no assets/interface, building without the interface")
+    endif()
     add_library(MeowSynth SHARED ${PLUGIN_SOURCES} ${DAMSDK_SOURCES} exports.def)
+    if(MEOW_HAS_GUI)
+        target_compile_definitions(MeowSynth PRIVATE MEOW_HAS_GUI)
+    endif()
     target_include_directories(MeowSynth PRIVATE src)
     if(MINGW AND CMAKE_CROSSCOMPILING)
         target_include_directories(MeowSynth PRIVATE cmake/mingw-include)  # <Windows.h> on a case-sensitive host

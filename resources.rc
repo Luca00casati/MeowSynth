@@ -1,0 +1,20 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+// Copyright (C) 2026 Luca Casati
+// The panel bitmaps, made by tools/extract_assets.py from your copy of the original plugin.
+#include "src/gui/Resources.h"
+
+IDB_BACKGROUND      BITMAP "assets/interface/background.bmp"
+IDB_KNOB_M          BITMAP "assets/interface/knob_m.bmp"
+IDB_KNOB_O          BITMAP "assets/interface/knob_o.bmp"
+IDB_KNOB_E          BITMAP "assets/interface/knob_e.bmp"
+IDB_KNOB_W          BITMAP "assets/interface/knob_w.bmp"
+IDB_KNOB_VIBAMOUNT  BITMAP "assets/interface/knob_vibamount.bmp"
+IDB_KNOB_VIBATTACK  BITMAP "assets/interface/knob_vibattack.bmp"
+IDB_KNOB_PORTA      BITMAP "assets/interface/knob_porta.bmp"
+IDB_KNOB_NOISE      BITMAP "assets/interface/knob_noise.bmp"
+IDB_KNOB_CHORUS     BITMAP "assets/interface/knob_chorus.bmp"
+IDB_LFO             BITMAP "assets/interface/lfo.bmp"
+IDB_PITCHRANGE      BITMAP "assets/interface/pitchrange.bmp"
+IDB_POLYCAT         BITMAP "assets/interface/polycat.bmp"
+IDB_URL             BITMAP "assets/interface/url.bmp"
+IDB_CAT             BITMAP "assets/interface/cat.bmp"

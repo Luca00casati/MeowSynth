@@ -8,6 +8,7 @@
 // those (path selection, segment restarts, call splits) like the original. This engine mirrors
 // that per block: sliders and the shared LFO / chorus modulation first, then each voice in
 // data-flow order, then the sum of the voices.
+#include <atomic>
 #include <cstdint>
 #include <memory>
 #include <vector>
@@ -40,6 +41,10 @@ namespace meow {
         void midi(int offset, unsigned char status, unsigned char data1, unsigned char data2);
 
         void process(float* left, float* right, int count);
+
+        // The amplitude envelope (0..1) of the loudest running voice at the end of the last
+        // block; the panel's cat animation follows it. Safe to read from another thread.
+        float envelopeLevel() const;
 
     private:
         struct Impl;

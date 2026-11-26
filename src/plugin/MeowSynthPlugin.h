@@ -39,6 +39,10 @@ namespace meow {
         int32_t getPluginCategory() override;
         int32_t pluginSupports(char* what) override;
 
+        // The cat animation frame (0..11): the amplitude envelope in volts, as SynthEdit's
+        // Volts2GuiInt passes it to the panel.
+        int catFrame() const;
+
     private:
         void render(float* left, float* right, int32_t frames);
         void updateTempo();

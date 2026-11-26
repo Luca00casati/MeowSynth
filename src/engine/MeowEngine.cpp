@@ -798,6 +798,7 @@ namespace meow {
             for (auto& v : voices) v.filterL.pendingType = v.filterR.pendingType = 0;
         }
         bool memoriesDirty = false;
+        std::atomic<float> envelope{ 0.0f };
         int pendingProgram = -1;
 
         void block(float* l, float* r) {
@@ -864,6 +865,10 @@ namespace meow {
                 std::fill(l, l + gLen, 0.0f);
                 std::fill(r, r + gLen, 0.0f);
             }
+            float level = 0.0f;
+            for (int i = 0; i < kVoices; i++)
+                if (!suspended[i]) level = std::max(level, voices[i].envAmp.out.buf[gLen - 1]);
+            envelope.store(level, std::memory_order_relaxed);
             for (int i = 0; i < kVoices; i++) {
                 Voice& v = voices[i];
                 // A voice whose outputs have gone static is suspended two blocks later (it then
@@ -933,6 +938,8 @@ namespace meow {
     void MeowEngine::midi(int offset, unsigned char s, unsigned char d1, unsigned char d2) {
         impl->midiQueue.push_back({ offset, s, d1, d2 });
     }
+
+    float MeowEngine::envelopeLevel() const { return impl->envelope.load(std::memory_order_relaxed); }
 
     void MeowEngine::process(float* left, float* right, int count) {
         if (!impl->started) impl->open();

@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // Copyright (C) 2026 Luca Casati
 #include "MeowSynthPlugin.h"
+#ifdef MEOW_HAS_GUI
+#include "gui/MeowEditor.h"
+#endif
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
@@ -31,11 +34,24 @@ namespace meow {
         setIsSynthesizer(true);
         setPluginId('meow');
         engine.setProgram(0);
+#ifdef MEOW_HAS_GUI
+        editor = new MeowEditor(this);
+#endif
     }
 
     MeowSynthPlugin::~MeowSynthPlugin() {}
 
-    void MeowSynthPlugin::setParameterValue(int32_t index, float value) { engine.setParameter(index, value); }
+    void MeowSynthPlugin::setParameterValue(int32_t index, float value) {
+        engine.setParameter(index, value);
+#ifdef MEOW_HAS_GUI
+        if (editor) static_cast<MeowEditor*>(editor)->parameterChanged(index, value);
+#endif
+    }
+
+    int MeowSynthPlugin::catFrame() const {
+        int f = (int)(engine.envelopeLevel() * 10.0f);
+        return f < 0 ? 0 : f > 11 ? 11 : f;
+    }
     float MeowSynthPlugin::getParameterValue(int32_t index) { return engine.getParameter(index); }
     void MeowSynthPlugin::getParameterName(int32_t index, char* text) { copyText(text, MeowEngine::parameterName(index), 24); }
     void MeowSynthPlugin::getParameterValueString(int32_t index, char* text) { engine.parameterDisplay(index, text, 24); }
@@ -98,9 +114,11 @@ namespace meow {
         return 1;
     }
 
-    bool MeowSynthPlugin::getPluginName(char* text) { copyText(text, "MeowSynth", 32); return true; }
-    bool MeowSynthPlugin::getCompanyName(char* text) { copyText(text, "knobster.org", 64); return true; }
-    bool MeowSynthPlugin::getProductName(char* text) { copyText(text, "MeowSynth", 64); return true; }
+    // DamSDK's names don't follow the opcodes they answer (checked with tools/probe_plugin.cpp):
+    // getCompanyName is effGetEffectName and getProductName is effGetVendorString.
+    bool MeowSynthPlugin::getCompanyName(char* text) { copyText(text, "MeowSynth", 32); return true; }
+    bool MeowSynthPlugin::getProductName(char* text) { copyText(text, "knobster.org", 64); return true; }
+    bool MeowSynthPlugin::getPluginName(char* text) { copyText(text, "MeowSynth", 64); return true; }
     int32_t MeowSynthPlugin::getCompanyVersion() { return 1; }
     int32_t MeowSynthPlugin::getPluginCategory() { return 2; }  // kPlugCategSynth
     int32_t MeowSynthPlugin::pluginSupports(char* what) {

@@ -22,6 +22,7 @@ The decoded graph (modules, settings, wiring, presets) is in [docs/patch-graph.t
 
 ```sh
 git submodule update --init                      # DamSDK
+python3 tools/extract_assets.py /path/to/original/MeowSynth.dll   # the interface (optional)
 cmake -S . -B build/x86_64 -DCMAKE_TOOLCHAIN_FILE=cmake/mingw-x86_64.cmake -DCMAKE_BUILD_TYPE=Release
 cmake --build build/x86_64                       # build/x86_64/MeowSynth.dll (64-bit VST 2.x)
 cmake -S . -B build/i686 -DCMAKE_TOOLCHAIN_FILE=cmake/mingw-i686.cmake -DCMAKE_BUILD_TYPE=Release
@@ -73,7 +74,8 @@ wine probe_plugin.exe MeowSynth.dll    # parameters, programs, I/O
 - [x] Reference renders from the original plugin (under Wine).
 - [x] Audio tests against the references: bit-exact.
 - [x] Synth engine on DamSDK, 32 and 64-bit builds.
-- [ ] Interface (panel, knobs, cat animation) from the original skin.
+- [x] Interface (panel, knobs, cat animation) from the original skin, extracted from your own copy
+  ([docs/gui-notes.md](docs/gui-notes.md)); without it the plugin builds with the host's generic UI.
 
 ## Licensing
 Copyright (C) 2026 Luca Casati
