@@ -23,6 +23,24 @@ The decoded graph (modules, settings, wiring, presets) is in [docs/patch-graph.t
 ```sh
 git submodule update --init                      # DamSDK
 python3 tools/extract_assets.py /path/to/original/MeowSynth.dll   # the interface (optional)
+```
+
+On Windows, with Visual Studio 2022 or 2026 (use the `vs2022` presets for 2022):
+
+```powershell
+cmake --preset vs2026-x64
+cmake --build --preset vs2026-x64 --config Release   # 64-bit (for modern DAWs)
+cmake --preset vs2026
+cmake --build --preset vs2026 --config Release       # 32-bit (like the original)
+ctest --preset vs2026-x64                            # engine vs the original's audio
+```
+
+The plugin is written to `build/bin/vs2026/<x32|x64>/Release/MeowSynth.dll`, with the C runtime
+linked in.
+
+On Linux (or WSL), cross-compile with MinGW-w64 (on Debian: `sudo apt install cmake make mingw-w64`):
+
+```sh
 cmake -S . -B build/x86_64 -DCMAKE_TOOLCHAIN_FILE=cmake/mingw-x86_64.cmake -DCMAKE_BUILD_TYPE=Release
 cmake --build build/x86_64                       # build/x86_64/MeowSynth.dll (64-bit VST 2.x)
 cmake -S . -B build/i686 -DCMAKE_TOOLCHAIN_FILE=cmake/mingw-i686.cmake -DCMAKE_BUILD_TYPE=Release

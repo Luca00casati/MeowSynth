@@ -12,12 +12,36 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON CACHE INTERNAL "")
 
 option(MEOWSYNTH_BUILD_TESTS "Build the native tests (engine vs reference renders)" ON)
 
+# Visual Studio (CMakePresets.json): write to build/bin/<toolchain>/<x32|x64>/<config>, as DelayLama does
+if(CMAKE_GENERATOR MATCHES "Visual Studio")
+    if(CMAKE_VS_PLATFORM_NAME STREQUAL "Win32")
+        set(OUTPUT_ARCH "x32")
+    else()
+        set(OUTPUT_ARCH "${CMAKE_VS_PLATFORM_NAME}")
+    endif()
+    if(NOT CMAKE_TOOLCHAIN_OUTPUT_NAME)
+        set(CMAKE_TOOLCHAIN_OUTPUT_NAME "default")
+    endif()
+    foreach(config IN LISTS CMAKE_CONFIGURATION_TYPES)
+        string(TOUPPER "${config}" CONFIG_UPPER)
+        set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_${CONFIG_UPPER}
+            "${CMAKE_SOURCE_DIR}/build/bin/${CMAKE_TOOLCHAIN_OUTPUT_NAME}/${OUTPUT_ARCH}/${config}")
+    endforeach()
+endif()
+
 # The DSP reproduces the original's floating-point arithmetic exactly: IEEE double/float
 # operations in program order (no fused multiply-add, no x87 extended precision) and the
 # rounding-mode switches some loops make.
-set(MEOW_FP_FLAGS -frounding-math -ffp-contract=off)
-if(CMAKE_SYSTEM_PROCESSOR MATCHES "i[3-6]86" OR CMAKE_SIZEOF_VOID_P EQUAL 4)
-    list(APPEND MEOW_FP_FLAGS -msse2 -mfpmath=sse)
+if(MSVC)
+    # /fp:strict: no contraction, and fesetround is honoured. MSVC already uses SSE2 on 32-bit.
+    set(MEOW_FP_FLAGS /fp:strict)
+    # Link the C runtime in, so hosts don't need the Visual C++ redistributable.
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+else()
+    set(MEOW_FP_FLAGS -frounding-math -ffp-contract=off)
+    if(CMAKE_SYSTEM_PROCESSOR MATCHES "i[3-6]86" OR CMAKE_SIZEOF_VOID_P EQUAL 4)
+        list(APPEND MEOW_FP_FLAGS -msse2 -mfpmath=sse)
+    endif()
 endif()
 
 file(GLOB DSP_SOURCES src/dsp/*.cpp src/engine/*.cpp)
